@@ -1,3 +1,21 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2890](https://github.com/citra-emu/citra/pull/2890)|Test PR -- Please ignore.|chris062689|true|
+|[2865](https://github.com/citra-emu/citra/pull/2865)|PICA: implemented geometry shader|wwylele|true|
+|[2858](https://github.com/citra-emu/citra/pull/2858)|interpolate: Interpolate on a frame-by-frame basis|MerryMage|true|
+|[2842](https://github.com/citra-emu/citra/pull/2842)|Kernel/Memory: Give each process its own page table and allow switching the current page table upon reschedule|Subv|true|
+|[2831](https://github.com/citra-emu/citra/pull/2831)|Services/UDS: Handle beacon frames and the basic AP connection sequence frames.|Subv|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 The Citra Emulator
