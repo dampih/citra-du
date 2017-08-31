@@ -57,6 +57,9 @@ if (ENABLE_WEB_SERVICE)
     # CPR
     option(BUILD_TESTING OFF)
     option(BUILD_CPR_TESTS OFF)
+    if(UNIX OR APPLE)
+        option(USE_SYSTEM_CURL ON)
+    endif()
     add_subdirectory(cpr)
     target_include_directories(cpr INTERFACE ./cpr/include)
 
