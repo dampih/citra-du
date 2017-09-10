@@ -1,3 +1,19 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2923](https://github.com/citra-emu/citra/pull/2923)|travis_OSX: build with system curl|B3n30|true|
+|[2890](https://github.com/citra-emu/citra/pull/2890)|Test PR -- Please ignore.|chris062689|true|
+|[2842](https://github.com/citra-emu/citra/pull/2842)|Kernel/Memory: Give each process its own page table and allow switching the current page table upon reschedule|Subv|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 The Citra Emulator
