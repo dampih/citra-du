@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include "common/common_types.h"
 #include "core/arm/skyeye_common/arm_regformat.h"
 #include "core/arm/skyeye_common/vfp/asm_vfp.h"
@@ -40,6 +41,13 @@ public:
 
     /// Clear all instruction cache
     virtual void ClearInstructionCache() = 0;
+
+    /**
+     * Invalidate the code cache at a range of addresses.
+     * @param start_address The starting address of the range to invalidate.
+     * @param length The length (in bytes) of the range to invalidate.
+     */
+    virtual void InvalidateCacheRange(u32 start_address, size_t length) = 0;
 
     /**
      * Set the Program Counter to an address

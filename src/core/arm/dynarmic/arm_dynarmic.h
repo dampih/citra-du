@@ -36,6 +36,7 @@ public:
     void ExecuteInstructions(int num_instructions) override;
 
     void ClearInstructionCache() override;
+    void InvalidateCacheRange(u32 start_address, size_t length) override;
 
 private:
     std::unique_ptr<Dynarmic::Jit> jit;

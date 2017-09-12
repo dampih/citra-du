@@ -176,3 +176,7 @@ void ARM_Dynarmic::PrepareReschedule() {
 void ARM_Dynarmic::ClearInstructionCache() {
     jit->ClearCache();
 }
+
+void ARM_Dynarmic::InvalidateCacheRange(u32 start_address, size_t length) {
+    jit->InvalidateCacheRange(start_address, length);
+}

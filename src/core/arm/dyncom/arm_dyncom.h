@@ -16,6 +16,7 @@ public:
     ~ARM_DynCom();
 
     void ClearInstructionCache() override;
+    void InvalidateCacheRange(u32 start_address, size_t length) override;
 
     void SetPC(u32 pc) override;
     u32 GetPC() const override;
