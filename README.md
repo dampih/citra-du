@@ -1,3 +1,19 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2921](https://github.com/citra-emu/citra/pull/2921)|GPU: Add draw for immediate and batch modes|jroweboy|true|
+|[2920](https://github.com/citra-emu/citra/pull/2920)|Services/UDS: Added a function to send EAPoL-Start packets|B3n30|true|
+|[2890](https://github.com/citra-emu/citra/pull/2890)|Test PR -- Please ignore.|chris062689|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 The Citra Emulator
