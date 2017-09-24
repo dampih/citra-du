@@ -12,6 +12,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-local-typedef"
 #endif
+#include <boost/icl/interval_set.hpp>
 #include <boost/icl/interval_map.hpp>
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -20,21 +21,32 @@
 #include "common/assert.h"
 #include "common/common_funcs.h"
 #include "common/common_types.h"
+#include "common/math_util.h"
 #include "core/hw/gpu.h"
 #include "video_core/regs_framebuffer.h"
 #include "video_core/regs_texturing.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 
-namespace MathUtil {
-template <class T>
-struct Rectangle;
-}
-
 struct CachedSurface;
+using Surface = std::shared_ptr<CachedSurface>;
+using SurfaceSet = std::set<Surface>;
 
-using SurfaceCache = boost::icl::interval_map<PAddr, std::set<std::shared_ptr<CachedSurface>>>;
+using SurfaceRegions = boost::icl::interval_set<PAddr>;
+using SurfaceMap = boost::icl::interval_map<PAddr, Surface>;
+using SurfaceCache = boost::icl::interval_map<PAddr, SurfaceSet>;
 
-struct CachedSurface {
+using SurfaceInterval = SurfaceCache::interval_type;
+static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval_type>() &&
+    std::is_same<SurfaceMap::interval_type, SurfaceCache::interval_type>(), "incorrect interval types");
+
+using SurfaceRect_Tuple = std::tuple<Surface, MathUtil::Rectangle<int>>;
+using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, MathUtil::Rectangle<int>>;
+
+using PageMap = boost::icl::interval_map<u32, int>;
+
+struct SurfaceParams {
+    explicit SurfaceParams();
+
     enum class PixelFormat {
         // First 5 formats are shared between textures and color buffers
         RGBA8 = 0,
@@ -68,10 +80,11 @@ struct CachedSurface {
         Texture = 1,
         Depth = 2,
         DepthStencil = 3,
-        Invalid = 4,
+        Fill = 4,
+        Invalid = 5
     };
 
-    static unsigned int GetFormatBpp(CachedSurface::PixelFormat format) {
+    static unsigned int GetFormatBpp(SurfaceParams::PixelFormat format) {
         static const std::array<unsigned int, 18> bpp_table = {
             32, // RGBA8
             24, // RGB8
@@ -162,31 +175,98 @@ struct CachedSurface {
         return SurfaceType::Invalid;
     }
 
+    /// Update the params "size", "end", "bytes_per_pixel" and "type" from the already set "addr", "width", "height" and "pixel_format"
+    void UpdateParams() {
+        size = width * height * GetFormatBpp(pixel_format) / 8;
+
+        if (stride == 0)
+            stride = width;
+        else
+            size += (stride - width) * (height - 1) * GetFormatBpp(pixel_format) / 8;
+
+        end = addr + size;
+        type = GetFormatType(pixel_format);
+        bytes_per_pixel = GetFormatBpp(pixel_format) / 8;
+    }
+
+    SurfaceInterval GetInterval() const {
+        return SurfaceInterval::right_open(addr, end);
+    }
+
     u32 GetScaledWidth() const {
-        return (u32)(width * res_scale_width);
+        return static_cast<u32>(width * res_scale_width);
     }
 
     u32 GetScaledHeight() const {
-        return (u32)(height * res_scale_height);
+        return static_cast<u32>(height * res_scale_height);
     }
 
-    PAddr addr;
-    u32 size;
+    MathUtil::Rectangle<int> GetRect() const {
+        return MathUtil::Rectangle<int>(0, 0, width, height);
+    }
 
-    PAddr min_valid;
-    PAddr max_valid;
+    MathUtil::Rectangle<int> GetScaledRect() const {
+        return MathUtil::Rectangle<int>(0, 0, GetScaledWidth(), GetScaledHeight());
+    }
 
-    OGLTexture texture;
-    u32 width;
-    u32 height;
-    /// Stride between lines, in pixels. Only valid for images in linear format.
-    u32 pixel_stride = 0;
+    u32 PixelsInBytes(u32 size) const {
+        return size * 8 / GetFormatBpp(pixel_format);
+    }
+
+    PAddr addr = 0;
+    PAddr end = 0;
+    u32 size = 0;
+
+    u32 width = 0;
+    u32 height = 0;
+    u32 stride = 0;
     float res_scale_width = 1.f;
     float res_scale_height = 1.f;
 
-    bool is_tiled;
-    PixelFormat pixel_format;
-    bool dirty;
+    bool is_tiled = false;
+    u32 bytes_per_pixel = 0;
+    PixelFormat pixel_format = PixelFormat::Invalid;
+    SurfaceType type = SurfaceType::Invalid;
+};
+
+struct CachedSurface : SurfaceParams {
+    bool ExactMatch(const SurfaceParams& other_surface) const;
+    bool CanSubRect(const SurfaceParams& sub_surface) const;
+    bool CanCopy(const SurfaceParams& dest_surface) const;
+
+    MathUtil::Rectangle<int> GetSubRect(const SurfaceParams& sub_surface) const;
+    MathUtil::Rectangle<int> GetScaledSubRect(const SurfaceParams& sub_surface) const;
+
+    bool IsRegionValid(const SurfaceInterval& interval) const {
+        return (invalid_regions.find(interval) == invalid_regions.end());
+    }
+
+    bool IsRegionPartiallyValid(const SurfaceInterval& interval) const {
+        const auto it = invalid_regions.find(interval);
+        if (it == invalid_regions.end())
+            return true;
+        return ((boost::icl::first(*it) > addr) || (boost::icl::last_next(*it) < end));
+    }
+
+    SurfaceRegions invalid_regions;
+
+    u32 fill_size = 0; /// Number of bytes to read from fill_data
+    std::array<u8, 4> fill_data;
+
+    OGLTexture texture;
+
+    u32 gl_bytes_per_pixel;
+    int gl_buffer_offset;
+    std::vector<u8> gl_buffer;
+    bool gl_buffer_dirty;
+
+    // Read/Write data in 3DS memory to/from gl_buffer
+    void LoadGLBuffer(PAddr load_start, PAddr load_end);
+    void FlushGLBuffer(PAddr flush_start, PAddr flush_end);
+
+    // Upload/Download data in gl_buffer in/to this surface's texture
+    void UploadGLTexture();
+    void DownloadGLTexture();
 };
 
 class RasterizerCacheOpenGL : NonCopyable {
@@ -194,46 +274,56 @@ public:
     RasterizerCacheOpenGL();
     ~RasterizerCacheOpenGL();
 
-    /// Blits one texture to another
-    void BlitTextures(GLuint src_tex, GLuint dst_tex, CachedSurface::SurfaceType type,
-                      const MathUtil::Rectangle<int>& src_rect,
-                      const MathUtil::Rectangle<int>& dst_rect);
+    /// Blit one surface's texture to another
+    bool BlitSurfaces(const Surface& src_surface, const MathUtil::Rectangle<int>& src_rect,
+                      const Surface& dst_surface, const MathUtil::Rectangle<int>& dst_rect);
 
-    /// Attempt to blit one surface's texture to another
-    bool TryBlitSurfaces(CachedSurface* src_surface, const MathUtil::Rectangle<int>& src_rect,
-                         CachedSurface* dst_surface, const MathUtil::Rectangle<int>& dst_rect);
-
-    /// Loads a texture from 3DS memory to OpenGL and caches it (if not already cached)
-    CachedSurface* GetSurface(const CachedSurface& params, bool match_res_scale,
-                              bool load_if_create);
+    /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
+    Surface GetSurface(const SurfaceParams& params, bool match_res_scale, bool load_if_create);
 
     /// Attempt to find a subrect (resolution scaled) of a surface, otherwise loads a texture from
     /// 3DS memory to OpenGL and caches it (if not already cached)
-    CachedSurface* GetSurfaceRect(const CachedSurface& params, bool match_res_scale,
-                                  bool load_if_create, MathUtil::Rectangle<int>& out_rect);
+    SurfaceRect_Tuple GetSurfaceSubRect(const SurfaceParams& params, bool match_res_scale,
+                                        bool load_if_create);
 
-    /// Gets a surface based on the texture configuration
-    CachedSurface* GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config);
+    /// Get a surface based on the texture configuration
+    Surface GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config);
 
-    /// Gets the color and depth surfaces and rect (resolution scaled) based on the framebuffer
-    /// configuration
-    std::tuple<CachedSurface*, CachedSurface*, MathUtil::Rectangle<int>> GetFramebufferSurfaces(
-        const Pica::FramebufferRegs::FramebufferConfig& config);
+    /// Get the color and depth surfaces based on the framebuffer configuration
+    SurfaceSurfaceRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
 
-    /// Attempt to get a surface that exactly matches the fill region and format
-    CachedSurface* TryGetFillSurface(const GPU::Regs::MemoryFillConfig& config);
+    /// Get a surface that matches the fill config
+    Surface GetFillSurface(const GPU::Regs::MemoryFillConfig& config);
 
-    /// Write the surface back to memory
-    void FlushSurface(CachedSurface* surface);
+    /// Get a surface that matches a "texture copy" display transfer config
+    SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);
 
-    /// Write any cached resources overlapping the region back to memory (if dirty) and optionally
-    /// invalidate them in the cache
-    void FlushRegion(PAddr addr, u32 size, const CachedSurface* skip_surface, bool invalidate);
+    /// Write any cached resources overlapping the region back to memory (if dirty)
+    void FlushRegion(PAddr addr, u32 size);
+
+    /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
+    void InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner);
 
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();
 
 private:
+    /// Update surface's texture for given region when necessary
+    void ValidateSurface(const Surface& surface, PAddr addr, u32 size);
+
+    /// Create a new surface
+    Surface CreateSurface(const SurfaceParams& params);
+
+    /// Register surface into the cache
+    void RegisterSurface(const Surface& surface);
+
+    /// Remove surface from the cache
+    void UnregisterSurface(const Surface& surface);
+
+    /// Increase/decrease the number of surface in pages touching the specified region
+    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta);
+
     SurfaceCache surface_cache;
-    OGLFramebuffer transfer_framebuffers[2];
+    SurfaceMap dirty_regions;
+    PageMap cached_pages;
 };
