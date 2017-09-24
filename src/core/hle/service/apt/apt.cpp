@@ -158,6 +158,12 @@ static AppletSlotData* GetAppletSlotData(AppletAttributes attributes) {
     if (slot == AppletSlot::Error)
         return nullptr;
 
+    // The Home Menu is a system applet, however, it has its own applet slot so that it can run
+    // concurrently with other system applets.
+    static constexpr u32 HomeMenuAttributeMask = 0x20000000;
+    if (slot == AppletSlot::SystemApplet && attributes.raw & HomeMenuAttributeMask)
+        return &applet_slots[static_cast<size_t>(AppletSlot::HomeMenu)];
+
     return &applet_slots[static_cast<size_t>(slot)];
 }
 
@@ -197,6 +203,19 @@ void Initialize(Service::Interface* self) {
     rb.Push(RESULT_SUCCESS);
     rb.PushCopyHandles(Kernel::g_handle_table.Create(slot_data->notification_event).Unwrap(),
                        Kernel::g_handle_table.Create(slot_data->parameter_event).Unwrap());
+
+    if (slot_data->applet_id == AppletId::Application ||
+        slot_data->applet_id == AppletId::HomeMenu) {
+        // Initialize the APT parameter to wake up the application.
+        next_parameter.emplace();
+        next_parameter->signal = static_cast<u32>(SignalType::Wakeup);
+        next_parameter->sender_id = static_cast<u32>(AppletId::None);
+        next_parameter->destination_id = app_id;
+        // Not signaling the parameter event will cause the application (or Home Menu) to hang
+        // during startup. In the real console, it is usually the Kernel and Home Menu who cause NS
+        // to signal the HomeMenu and Application parameter events, respectively.
+        slot_data->parameter_event->Signal();
+    }
 }
 
 static u32 DecompressLZ11(const u8* in, u8* out) {
@@ -757,6 +776,20 @@ void PrepareToStartLibraryApplet(Service::Interface* self) {
     LOG_DEBUG(Service_APT, "called applet_id=%08X", applet_id);
 }
 
+void PrepareToStartNewestHomeMenu(Service::Interface* self) {
+    IPC::RequestParser rp(Kernel::GetCommandBuffer(), 0x1A, 0, 0); // 0x1A0000
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+
+    // TODO(Subv): This command can only be called by a System Applet (return 0xC8A0CC04 otherwise).
+
+    // This command must return an error when called, otherwise the Home Menu will try to reboot the
+    // system.
+    rb.Push(ResultCode(ErrorDescription::AlreadyExists, ErrorModule::Applet,
+                       ErrorSummary::InvalidState, ErrorLevel::Status));
+
+    LOG_DEBUG(Service_APT, "called");
+}
+
 void PreloadLibraryApplet(Service::Interface* self) {
     IPC::RequestParser rp(Kernel::GetCommandBuffer(), 0x16, 1, 0); // 0x160040
     AppletId applet_id = static_cast<AppletId>(rp.Pop<u32>());
@@ -1041,12 +1074,6 @@ void Init() {
         slot_data.parameter_event =
             Kernel::Event::Create(Kernel::ResetType::OneShot, "APT:Parameter");
     }
-
-    // Initialize the parameter to wake up the application.
-    next_parameter.emplace();
-    next_parameter->signal = static_cast<u32>(SignalType::Wakeup);
-    next_parameter->destination_id = static_cast<u32>(AppletId::Application);
-    applet_slots[static_cast<size_t>(AppletSlot::Application)].parameter_event->Signal();
 }
 
 void Shutdown() {
