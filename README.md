@@ -1,3 +1,18 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2958](https://github.com/citra-emu/citra/pull/2958)|Audio: Use std::deque instead of std::vector for the audio buffer type (StereoBuffer16)|Subv|true|
+|[2946](https://github.com/citra-emu/citra/pull/2946)|Implement PrepareToStartNewestHomeMenu and fixed an APT regression.|Subv|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 Citra Emulator
