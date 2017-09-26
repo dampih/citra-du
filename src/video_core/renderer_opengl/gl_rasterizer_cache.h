@@ -44,6 +44,12 @@ using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, MathUtil::Rectangl
 
 using PageMap = boost::icl::interval_map<u32, int>;
 
+enum class ScaleMatch {
+    Exact, // only accept same res scale
+    Upscale, // only allow higher scale than params
+    Ignore // accept every scaled res
+};
+
 struct SurfaceParams {
     explicit SurfaceParams();
 
@@ -233,6 +239,8 @@ struct CachedSurface : SurfaceParams {
     bool ExactMatch(const SurfaceParams& other_surface) const;
     bool CanSubRect(const SurfaceParams& sub_surface) const;
     bool CanCopy(const SurfaceParams& dest_surface) const;
+    //bool CanPartialCopy(const SurfaceParams& dest_surface) const;
+    bool CanTexCopy(const SurfaceParams& texcopy_params) const;
 
     MathUtil::Rectangle<int> GetSubRect(const SurfaceParams& sub_surface) const;
     MathUtil::Rectangle<int> GetScaledSubRect(const SurfaceParams& sub_surface) const;
@@ -279,11 +287,11 @@ public:
                       const Surface& dst_surface, const MathUtil::Rectangle<int>& dst_rect);
 
     /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
-    Surface GetSurface(const SurfaceParams& params, bool match_res_scale, bool load_if_create);
+    Surface GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale, bool load_if_create);
 
     /// Attempt to find a subrect (resolution scaled) of a surface, otherwise loads a texture from
     /// 3DS memory to OpenGL and caches it (if not already cached)
-    SurfaceRect_Tuple GetSurfaceSubRect(const SurfaceParams& params, bool match_res_scale,
+    SurfaceRect_Tuple GetSurfaceSubRect(const SurfaceParams& params, ScaleMatch match_res_scale,
                                         bool load_if_create);
 
     /// Get a surface based on the texture configuration
@@ -299,7 +307,7 @@ public:
     SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);
 
     /// Write any cached resources overlapping the region back to memory (if dirty)
-    void FlushRegion(PAddr addr, u32 size);
+    void FlushRegion(PAddr addr, u32 size, Surface flush_surface = nullptr);
 
     /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
     void InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner);

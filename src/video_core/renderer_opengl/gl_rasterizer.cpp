@@ -961,13 +961,16 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
 
     MathUtil::Rectangle<int> src_rect;
     Surface src_surface;
-    std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, false, true);
+    std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
     if (src_surface == nullptr)
         return false;
 
+    dst_params.res_scale_width = src_surface->res_scale_width;
+    dst_params.res_scale_height = src_surface->res_scale_height;
+
     MathUtil::Rectangle<int> dst_rect;
     Surface dst_surface;
-    std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, false, false);
+    std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
     if (dst_surface == nullptr)
         return false;
 
@@ -1016,12 +1019,14 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     dst_params.stride = (output_width + output_gap) * src_surface->stride / src_params.stride;
     dst_params.width = output_width * src_surface->stride / src_params.stride;
     dst_params.height = src_surface->is_tiled ? src_params.height * 8 : src_params.height;
+    dst_params.res_scale_width = src_surface->res_scale_width;
+    dst_params.res_scale_height = src_surface->res_scale_height;
     dst_params.UpdateParams();
 
     const bool load_gap = output_gap != 0; // Since we are going to invalidate the gap if there is one, we will have to load it first
     MathUtil::Rectangle<int> dst_rect;
     Surface dst_surface;
-    std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, false, load_gap);
+    std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
     if (src_surface == nullptr)
         return false;
 
@@ -1060,7 +1065,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
 
     MathUtil::Rectangle<int> src_rect;
     Surface src_surface;
-    std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, false, true);
+    std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
 
     if (src_surface == nullptr) {
         return false;

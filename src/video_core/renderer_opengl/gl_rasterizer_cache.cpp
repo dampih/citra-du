@@ -313,6 +313,7 @@ static bool FillSurface(const Surface& surface, const u8* fill_data) {
 }
 
 SurfaceParams::SurfaceParams() {
+    // todo: metroid needs that for now, "breaks" other stuff
     // Set the internal resolution, assume the same scaling factor for top and bottom screens
     float resolution_scale_factor = Settings::values.resolution_factor;
     if (resolution_scale_factor == 0.0f) {
@@ -394,6 +395,28 @@ bool CachedSurface::CanCopy(const SurfaceParams& dest_surface) const {
     return false;
 }
 
+bool CachedSurface::CanTexCopy(const SurfaceParams& texcopy_params) const {
+    if (pixel_format == PixelFormat::Invalid ||
+        addr > texcopy_params.addr || end < texcopy_params.end ||
+        ((texcopy_params.addr - addr) * 8) % SurfaceParams::GetFormatBpp(pixel_format) != 0 ||
+        (texcopy_params.width * 8) % SurfaceParams::GetFormatBpp(pixel_format) != 0 ||
+        (texcopy_params.stride * 8) % SurfaceParams::GetFormatBpp(pixel_format) != 0)
+        return false;
+
+    const u32 begin_pixel_index = PixelsInBytes(texcopy_params.addr - addr);
+    const int x0 = begin_pixel_index % width;
+    const int y0 = begin_pixel_index / width;
+
+    if (!is_tiled)
+        return (PixelsInBytes(texcopy_params.stride) == stride &&
+               x0 + PixelsInBytes(texcopy_params.width) <= stride);
+
+    return (PixelsInBytes(texcopy_params.addr - addr) % 64 == 0 &&
+        PixelsInBytes(texcopy_params.width) % 64 == 0 &&
+        PixelsInBytes(texcopy_params.stride) == stride * 8 &&
+        x0 + PixelsInBytes(texcopy_params.width / 8) <= stride);
+}
+
 static void CopySurface(const Surface& src_surface, const Surface& dest_surface) {
     if (src_surface == dest_surface)
         return;
@@ -425,6 +448,13 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
     const u8* const texture_src_data = Memory::GetPhysicalPointer(addr);
     if (texture_src_data == nullptr)
         return;
+
+    //TODO: Should probably be done in ::Memory:: and check for other regions too
+    if (load_start <= Memory::VRAM_VADDR_END && load_end > Memory::VRAM_VADDR_END)
+        load_end = Memory::VRAM_VADDR_END;
+
+    if (load_start < Memory::VRAM_VADDR && load_end >= Memory::VRAM_VADDR)
+        load_start = Memory::VRAM_VADDR;
 
     MICROPROFILE_SCOPE(OpenGL_SurfaceLoad);
 
@@ -473,6 +503,14 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
     u8* const dst_buffer = Memory::GetPhysicalPointer(addr);
     if (dst_buffer == nullptr)
         return;
+
+    //TODO: Should probably be done in ::Memory:: and check for other regions too
+    //same as loadglbuffer()
+    if (flush_start <= Memory::VRAM_VADDR_END && flush_end > Memory::VRAM_VADDR_END)
+        flush_end = Memory::VRAM_VADDR_END;
+
+    if (flush_start < Memory::VRAM_VADDR && flush_end >= Memory::VRAM_VADDR)
+        flush_start = Memory::VRAM_VADDR;
 
     MICROPROFILE_SCOPE(OpenGL_SurfaceFlush);
 
@@ -593,8 +631,9 @@ enum MatchType : int {
     SubRect = (1 << 1), // Surface encompasses params
     Invalid = (1 << 2), // Flag that can be applied to other match types, invalid matches require validation before they can be used
     Copy = (1 << 3), // Surface we can copy from
-    TexCopy = (1 << 4), // Surface that will match a display transfer "texture copy" parameters
-    All = (1 << 5) - 1,
+    //PartialCopy = (1 << 4), // Surface we can partialy copy from
+    TexCopy = (1 << 5), // Surface that will match a display transfer "texture copy" parameters
+    All = (1 << 6) - 1,
     None = 0,
 };
 
@@ -603,40 +642,37 @@ constexpr MatchType operator | (MatchType lhs, MatchType rhs) {
 }
 
 /// Get the best surface match (and its match type) for the given flags, higher flag value meaning lower priority
+/// NEW:: no more match type priority, only region validity matters and then scaling comparison
 template <MatchType find_flags>
-std::tuple<Surface, MatchType> FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params, bool match_res_scale) {
+Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params, ScaleMatch match_res_scale) {
     constexpr float MATCH_GOODNESS_RESET = -1.f;
 
     Surface match_surface = nullptr;
-    MatchType match_type = MatchType::All; // Starting from lowest possible priority
+    bool match_valid = false;
     float best_match_goodness = MATCH_GOODNESS_RESET;
 
     for (auto& pair : RangeFromInterval(surface_cache, params.GetInterval())) {
         for (auto& surface : pair.second) {
-            const bool res_scale_match = (params.res_scale_width == surface->res_scale_width && params.res_scale_height == surface->res_scale_height);
+            const bool res_scale_match = match_res_scale == ScaleMatch::Exact ?
+                (params.res_scale_width == surface->res_scale_width && params.res_scale_height == surface->res_scale_height) :
+                (params.res_scale_width <= surface->res_scale_width && params.res_scale_height <= surface->res_scale_height);
             const float match_goodness = surface->res_scale_width * surface->res_scale_height;
-            const MatchType invalid_mask = surface->IsRegionValid(params.GetInterval()) ? MatchType::None : MatchType::Invalid;
+            const bool is_valid = surface->IsRegionValid(params.GetInterval());
 
-            if (!(find_flags & MatchType::Invalid) && invalid_mask == MatchType::Invalid)
+            if (!(find_flags & MatchType::Invalid) && !is_valid)
                 continue;
 
             const auto IsMatch_Helper = [&](MatchType check_type, auto match_fn) {
                 if (!(find_flags & check_type))
                     return false;
 
-                check_type = check_type | invalid_mask;
-
-                // Lower flag value means higher priority
-                if (match_type < check_type) // We already have a better match type
-                    return true; // Return true to skip to the next surface
-
                 if (!match_fn())
                     return false;
 
-                if (!match_res_scale || res_scale_match || surface->type == SurfaceType::Fill) { // Found a match
-                    if (match_type > check_type) {
+                if (match_res_scale == ScaleMatch::Ignore || res_scale_match || surface->type == SurfaceType::Fill) { // Found a match
+                    if (is_valid && !match_valid) {
                         best_match_goodness = MATCH_GOODNESS_RESET;
-                        match_type = check_type;
+                        match_valid = true;
                     }
                     if (match_goodness > best_match_goodness) {
                         best_match_goodness = match_goodness;
@@ -645,37 +681,13 @@ std::tuple<Surface, MatchType> FindMatch(const SurfaceCache& surface_cache, cons
                 }
                 return false;
             };
-            if (IsMatch_Helper(MatchType::Exact, [&] { return surface->ExactMatch(params); }))
-                continue;
-            if (IsMatch_Helper(MatchType::SubRect, [&] { return surface->CanSubRect(params); }))
-                continue;
-            if (IsMatch_Helper(MatchType::Copy, [&] { return surface->CanCopy(params); }))
-                continue;
-            if (IsMatch_Helper(MatchType::TexCopy, [&] {
-                if (surface->pixel_format == PixelFormat::Invalid ||
-                    surface->addr > params.addr || surface->end < params.end ||
-                    ((params.addr - surface->addr) * 8) % SurfaceParams::GetFormatBpp(surface->pixel_format) != 0 ||
-                    (params.width * 8) % SurfaceParams::GetFormatBpp(surface->pixel_format) != 0 ||
-                    (params.stride * 8) % SurfaceParams::GetFormatBpp(surface->pixel_format) != 0)
-                    return false;
-
-                const u32 begin_pixel_index = surface->PixelsInBytes(params.addr - surface->addr);
-                const int x0 = begin_pixel_index % surface->width;
-                const int y0 = begin_pixel_index / surface->width;
-
-                if (!surface->is_tiled)
-                    return (surface->PixelsInBytes(params.stride) == surface->stride &&
-                        x0 + surface->PixelsInBytes(params.width) <= surface->stride);
-
-                return (surface->PixelsInBytes(params.addr - surface->addr) % 64 == 0 &&
-                    surface->PixelsInBytes(params.width) % 64 == 0 &&
-                    surface->PixelsInBytes(params.stride) == surface->stride * 8 &&
-                    x0 + surface->PixelsInBytes(params.width / 8) <= surface->stride);
-            }))
-                continue;
+            IsMatch_Helper(MatchType::Exact, [&] { return surface->ExactMatch(params); });
+            IsMatch_Helper(MatchType::SubRect, [&] { return surface->CanSubRect(params); });
+            IsMatch_Helper(MatchType::Copy, [&] { return surface->CanCopy(params); });
+            IsMatch_Helper(MatchType::TexCopy, [&] { return surface->CanTexCopy(params); });
         }
     }
-    return std::make_tuple(match_surface, (match_surface == nullptr) ? MatchType::None : match_type);
+    return match_surface;
 }
 
 RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
@@ -704,19 +716,16 @@ bool RasterizerCacheOpenGL::BlitSurfaces(const Surface& src_surface,
                         src_surface->type);
 }
 
-Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, bool match_res_scale, bool load_if_create) {
+Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale, bool load_if_create) {
     if (params.addr == 0 || params.height * params.width == 0) {
         return nullptr;
     }
 
     // Check for an exact or subrect match in existing surfaces
-    Surface surface_match;
-    MatchType match_type;
-    std::tie(surface_match, match_type) =
-        FindMatch<MatchType::Exact | MatchType::Invalid>(surface_cache, params, match_res_scale);
+    Surface surface_match = FindMatch<MatchType::Exact | MatchType::Invalid>(surface_cache, params, match_res_scale);
 
     if (surface_match != nullptr) {
-        if (load_if_create && (match_type & MatchType::Invalid)) {
+        if (load_if_create) {
             ValidateSurface(surface_match, params.addr, params.size);
         }
         return surface_match;
@@ -734,7 +743,7 @@ Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, bool matc
 }
 
 SurfaceRect_Tuple RasterizerCacheOpenGL::GetSurfaceSubRect(const SurfaceParams& params,
-                                                           bool match_res_scale,
+                                                           ScaleMatch match_res_scale,
                                                            bool load_if_create) {
     MathUtil::Rectangle<int> out_rect{};
 
@@ -743,19 +752,18 @@ SurfaceRect_Tuple RasterizerCacheOpenGL::GetSurfaceSubRect(const SurfaceParams& 
     }
 
     // Attempt to find encompassing surface
-    Surface subrect_match;
-    MatchType match_type;
-    std::tie(subrect_match, match_type) = FindMatch<MatchType::Exact | MatchType::SubRect | MatchType::Invalid>(surface_cache, params, match_res_scale);
+    Surface subrect_match = FindMatch<MatchType::SubRect | MatchType::Invalid>(surface_cache, params, match_res_scale);
 
     // Return the best subrect surface if found
     if (subrect_match != nullptr) {
+        if (load_if_create) {
+            ValidateSurface(subrect_match, params.addr, params.size);
+        }
+
         out_rect = subrect_match->GetScaledSubRect(params);
         // Tiled surfaces are flipped vertically in the rasterizer vs. 3DS memory.
         if (params.is_tiled)
             std::swap(out_rect.top, out_rect.bottom);
-
-        if (load_if_create && (match_type & MatchType::Invalid))
-            ValidateSurface(subrect_match, params.addr, params.size);
 
         return std::make_tuple(subrect_match, out_rect);
     }
@@ -791,7 +799,13 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::TexturingRegs::Full
     params.is_tiled = true;
     params.pixel_format = SurfaceParams::PixelFormatFromTextureFormat(info.format);
     params.UpdateParams();
-    return GetSurface(params, false, true);
+    return GetSurface(params, ScaleMatch::Ignore, true);
+}
+
+constexpr float GetResolutionScaleFactor() {
+    return Settings::values.resolution_factor == 0.0f ?
+        VideoCore::g_emu_window->GetFramebufferLayout().GetScalingRatio() :
+        Settings::values.resolution_factor;
 }
 
 SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(bool using_color_fb,
@@ -819,19 +833,31 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(bool usin
     SurfaceParams depth_params;
     color_params.is_tiled = depth_params.is_tiled = true;
 
+    // update resolution_scale_factor and reset cache if changed
+    static float resolution_scale_factor = GetResolutionScaleFactor();
+    if (resolution_scale_factor != GetResolutionScaleFactor()) {
+        resolution_scale_factor = GetResolutionScaleFactor();
+        FlushAll();
+        InvalidateRegion(0, 0xffffffff, nullptr);
+    }
+
     color_params.addr = config.GetColorBufferPhysicalAddress();
     color_params.width = depth_params.width = config.GetWidth();
     color_params.height = depth_params.height = config.GetHeight();
     color_params.pixel_format = SurfaceParams::PixelFormatFromColorFormat(config.color_format);
+    color_params.res_scale_height = resolution_scale_factor;
+    color_params.res_scale_width = resolution_scale_factor;
     color_params.UpdateParams();
 
     MathUtil::Rectangle<int> rect{};
     Surface color_surface = nullptr;
     if (using_color_fb)
-        std::tie(color_surface, rect) = GetSurfaceSubRect(color_params, true, true);
+        std::tie(color_surface, rect) = GetSurfaceSubRect(color_params, ScaleMatch::Exact, true);
 
     depth_params.pixel_format = SurfaceParams::PixelFormatFromDepthFormat(config.depth_format);
     depth_params.addr = config.GetDepthBufferPhysicalAddress();
+    depth_params.res_scale_height = resolution_scale_factor;
+    depth_params.res_scale_width = resolution_scale_factor;
     depth_params.UpdateParams();
 
     Surface depth_surface = nullptr;
@@ -844,11 +870,11 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(bool usin
         depth_params.height = color_surface->height;
         depth_params.UpdateParams();
 
-        depth_surface = GetSurface(depth_params, true, false);
+        depth_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
         ValidateSurface(depth_surface, validate_addr, validate_size);
     }
     else if (using_depth_fb) {
-        std::tie(depth_surface, rect) = GetSurfaceSubRect(depth_params, true, true);
+        std::tie(depth_surface, rect) = GetSurfaceSubRect(depth_params, ScaleMatch::Exact, true);
     }
 
     return std::make_tuple(color_surface, depth_surface, rect);
@@ -876,14 +902,11 @@ Surface RasterizerCacheOpenGL::GetFillSurface(const GPU::Regs::MemoryFillConfig&
 SurfaceRect_Tuple RasterizerCacheOpenGL::GetTexCopySurface(const SurfaceParams& params) {
     MathUtil::Rectangle<int> rect{};
 
-    Surface match_surface;
-    MatchType match_type;
-    std::tie(match_surface, match_type) = FindMatch<MatchType::TexCopy | MatchType::Invalid>(surface_cache, params, false);
-
-    if (match_type & MatchType::Invalid)
-        ValidateSurface(match_surface, params.addr, params.size);
+    Surface match_surface = FindMatch<MatchType::TexCopy | MatchType::Invalid>(surface_cache, params, ScaleMatch::Ignore);
 
     if (match_surface != nullptr) {
+        ValidateSurface(match_surface, params.addr, params.size);
+
         SurfaceParams match_subrect = params;
         match_subrect.width = match_surface->PixelsInBytes(params.width);
         match_subrect.stride = match_surface->PixelsInBytes(params.stride);
@@ -941,28 +964,26 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         }
         params.UpdateParams();
 
-        Surface match_surface;
-        MatchType match_type;
-        std::tie(match_surface, match_type) =
-            FindMatch<MatchType::Exact | MatchType::SubRect | MatchType::Copy>(surface_cache, params, true);
-
-        if (match_type == MatchType::Copy) {
-            // Need to call CopySurface and possibly create a new one first, which GetSurface will do for us
-            if (params.GetInterval() == surface->GetInterval()) {
-                CopySurface(match_surface, surface);
-                surface->invalid_regions.clear();
-                return;
-            }
-            Surface tmp_surface = GetSurface(params, true, false);
-            if (tmp_surface != nullptr)
-                CopySurface(match_surface, tmp_surface);
-            match_surface = tmp_surface;
-        }
+        Surface match_surface = FindMatch<MatchType::SubRect | MatchType::Copy>(surface_cache, params, ScaleMatch::Ignore);
 
         if (match_surface != nullptr) {
-            const auto src_rect = (match_type == MatchType::SubRect) ?
-                                  match_surface->GetScaledSubRect(params) :
-                                  match_surface->GetScaledRect();
+            if (!match_surface->CanSubRect(params)) {
+                // Need to call CopySurface and possibly create a new one first, which GetSurface will do for us
+                if (params.GetInterval() == surface->GetInterval()) {
+                    CopySurface(match_surface, surface);
+                    surface->invalid_regions.clear();
+                    return;
+                }
+                Surface tmp_surface = GetSurface(params, ScaleMatch::Upscale, false);
+                if (tmp_surface != nullptr) {
+                    CopySurface(match_surface, tmp_surface);
+                    tmp_surface->invalid_regions.erase(params.GetInterval());
+                    match_surface = tmp_surface;
+                }
+            }
+
+            ASSERT(match_surface->CanSubRect(params));
+            const auto src_rect = match_surface->GetScaledSubRect(params);
             const auto dest_rect = surface->GetScaledSubRect(params);
 
             BlitSurfaces(match_surface, src_rect, surface, dest_rect);
@@ -985,7 +1006,7 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         surface->UploadGLTexture();
 }
 
-void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size) {
+void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     if (size == 0)
         return;
 
@@ -993,6 +1014,9 @@ void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size) {
     for (auto& pair : RangeFromInterval(dirty_regions, flush_interval)) {
         const auto interval = pair.first & flush_interval;
         auto& surface = pair.second;
+
+        if (flush_surface != nullptr && surface != flush_surface)
+            continue;
 
         // Sanity check, this surface is the last one that marked this region dirty
         ASSERT(surface->IsRegionValid(interval));
@@ -1033,9 +1057,11 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
             // to (likely) mark the memory pages as uncached
             // but before that we have to flush its region that is still valid
             if (region_owner == nullptr) {
+                // If that surface has modified data outside of the invalidated range
+                // have to flush it first
                 const auto flush_intervals = SurfaceRegions(cached_surface->GetInterval()) - invalid_interval;
                 for (const auto& interval : flush_intervals) {
-                    FlushRegion(boost::icl::first(interval), boost::icl::length(interval));
+                    FlushRegion(boost::icl::first(interval), boost::icl::length(interval), cached_surface);
                 }
                 remove_surfaces.emplace(cached_surface);
                 continue;
