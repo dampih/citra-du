@@ -1,3 +1,20 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2967](https://github.com/citra-emu/citra/pull/2967)|Kernel/Threads: When putting a thread to wait, specify a function to execute when it is awoken|Subv|true|
+|[2961](https://github.com/citra-emu/citra/pull/2961)|Loaders: Don't automatically set the current process every time we load an application.|Subv|true|
+|[2953](https://github.com/citra-emu/citra/pull/2953)|HLE/APT: Always set up the APT parameter when starting a library applet.|Subv|true|
+|[2946](https://github.com/citra-emu/citra/pull/2946)|Implement PrepareToStartNewestHomeMenu and fixed an APT regression.|Subv|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 Citra Emulator
