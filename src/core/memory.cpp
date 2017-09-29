@@ -466,7 +466,7 @@ void ReadBlock(const VAddr src_addr, void* dest_buffer, const size_t size) {
 
     while (remaining_size > 0) {
         const size_t copy_amount = std::min(PAGE_SIZE - page_offset, remaining_size);
-        const VAddr current_vaddr = (page_index << PAGE_BITS) + page_offset;
+        const VAddr current_vaddr = static_cast<VAddr>((page_index << PAGE_BITS) + page_offset);
 
         switch (current_page_table->attributes[page_index]) {
         case PageType::Unmapped: {
@@ -489,13 +489,15 @@ void ReadBlock(const VAddr src_addr, void* dest_buffer, const size_t size) {
             break;
         }
         case PageType::RasterizerCachedMemory: {
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::Flush);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::Flush);
             std::memcpy(dest_buffer, GetPointerFromVMA(current_vaddr), copy_amount);
             break;
         }
         case PageType::RasterizerCachedSpecial: {
             DEBUG_ASSERT(GetMMIOHandler(current_vaddr));
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::Flush);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::Flush);
             GetMMIOHandler(current_vaddr)->ReadBlock(current_vaddr, dest_buffer, copy_amount);
             break;
         }
@@ -533,7 +535,7 @@ void WriteBlock(const VAddr dest_addr, const void* src_buffer, const size_t size
 
     while (remaining_size > 0) {
         const size_t copy_amount = std::min(PAGE_SIZE - page_offset, remaining_size);
-        const VAddr current_vaddr = (page_index << PAGE_BITS) + page_offset;
+        const VAddr current_vaddr = static_cast<VAddr>((page_index << PAGE_BITS) + page_offset);
 
         switch (current_page_table->attributes[page_index]) {
         case PageType::Unmapped: {
@@ -556,13 +558,15 @@ void WriteBlock(const VAddr dest_addr, const void* src_buffer, const size_t size
             break;
         }
         case PageType::RasterizerCachedMemory: {
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::FlushAndInvalidate);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::FlushAndInvalidate);
             std::memcpy(GetPointerFromVMA(current_vaddr), src_buffer, copy_amount);
             break;
         }
         case PageType::RasterizerCachedSpecial: {
             DEBUG_ASSERT(GetMMIOHandler(current_vaddr));
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::FlushAndInvalidate);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::FlushAndInvalidate);
             GetMMIOHandler(current_vaddr)->WriteBlock(current_vaddr, src_buffer, copy_amount);
             break;
         }
@@ -586,7 +590,7 @@ void ZeroBlock(const VAddr dest_addr, const size_t size) {
 
     while (remaining_size > 0) {
         const size_t copy_amount = std::min(PAGE_SIZE - page_offset, remaining_size);
-        const VAddr current_vaddr = (page_index << PAGE_BITS) + page_offset;
+        const VAddr current_vaddr = static_cast<VAddr>((page_index << PAGE_BITS) + page_offset);
 
         switch (current_page_table->attributes[page_index]) {
         case PageType::Unmapped: {
@@ -608,13 +612,15 @@ void ZeroBlock(const VAddr dest_addr, const size_t size) {
             break;
         }
         case PageType::RasterizerCachedMemory: {
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::FlushAndInvalidate);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::FlushAndInvalidate);
             std::memset(GetPointerFromVMA(current_vaddr), 0, copy_amount);
             break;
         }
         case PageType::RasterizerCachedSpecial: {
             DEBUG_ASSERT(GetMMIOHandler(current_vaddr));
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::FlushAndInvalidate);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::FlushAndInvalidate);
             GetMMIOHandler(current_vaddr)->WriteBlock(current_vaddr, zeros.data(), copy_amount);
             break;
         }
@@ -635,7 +641,7 @@ void CopyBlock(VAddr dest_addr, VAddr src_addr, const size_t size) {
 
     while (remaining_size > 0) {
         const size_t copy_amount = std::min(PAGE_SIZE - page_offset, remaining_size);
-        const VAddr current_vaddr = (page_index << PAGE_BITS) + page_offset;
+        const VAddr current_vaddr = static_cast<VAddr>((page_index << PAGE_BITS) + page_offset);
 
         switch (current_page_table->attributes[page_index]) {
         case PageType::Unmapped: {
@@ -659,13 +665,15 @@ void CopyBlock(VAddr dest_addr, VAddr src_addr, const size_t size) {
             break;
         }
         case PageType::RasterizerCachedMemory: {
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::Flush);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::Flush);
             WriteBlock(dest_addr, GetPointerFromVMA(current_vaddr), copy_amount);
             break;
         }
         case PageType::RasterizerCachedSpecial: {
             DEBUG_ASSERT(GetMMIOHandler(current_vaddr));
-            RasterizerFlushVirtualRegion(current_vaddr, copy_amount, FlushMode::Flush);
+            RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
+                                         FlushMode::Flush);
 
             std::vector<u8> buffer(copy_amount);
             GetMMIOHandler(current_vaddr)->ReadBlock(current_vaddr, buffer.data(), buffer.size());
@@ -678,8 +686,8 @@ void CopyBlock(VAddr dest_addr, VAddr src_addr, const size_t size) {
 
         page_index++;
         page_offset = 0;
-        dest_addr += copy_amount;
-        src_addr += copy_amount;
+        dest_addr += static_cast<VAddr>(copy_amount);
+        src_addr += static_cast<VAddr>(copy_amount);
         remaining_size -= copy_amount;
     }
 }

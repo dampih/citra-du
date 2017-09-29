@@ -15,7 +15,7 @@
 #include "core/hle/kernel/wait_object.h"
 #include "core/hle/result.h"
 
-enum ThreadPriority : s32 {
+enum ThreadPriority : u32 {
     THREADPRIO_HIGHEST = 0,       ///< Highest thread priority
     THREADPRIO_USERLAND_MAX = 24, ///< Highest thread priority for userland apps
     THREADPRIO_DEFAULT = 48,      ///< Default thread priority for userland apps
@@ -85,7 +85,7 @@ public:
      * Gets the thread's current priority
      * @return The current thread's priority
      */
-    s32 GetPriority() const {
+    u32 GetPriority() const {
         return current_priority;
     }
 
@@ -93,7 +93,7 @@ public:
      * Sets the thread's current priority
      * @param priority The new priority
      */
-    void SetPriority(s32 priority);
+    void SetPriority(u32 priority);
 
     /**
      * Boost's a thread's priority to the best priority among the thread's held mutexes.
@@ -105,7 +105,7 @@ public:
      * Temporarily boosts the thread's priority until the next time it is scheduled
      * @param priority The new priority
      */
-    void BoostPriority(s32 priority);
+    void BoostPriority(u32 priority);
 
     /**
      * Gets the thread's thread ID
@@ -179,8 +179,8 @@ public:
     u32 entry_point;
     u32 stack_top;
 
-    s32 nominal_priority; ///< Nominal thread priority, as set by the emulated application
-    s32 current_priority; ///< Current thread priority, can be temporarily changed
+    u32 nominal_priority; ///< Nominal thread priority, as set by the emulated application
+    u32 current_priority; ///< Current thread priority, can be temporarily changed
 
     u64 last_running_ticks; ///< CPU tick when thread was last running
 
@@ -225,7 +225,7 @@ private:
  * @param priority The priority to give the main thread
  * @return A shared pointer to the main thread
  */
-SharedPtr<Thread> SetupMainThread(u32 entry_point, s32 priority);
+SharedPtr<Thread> SetupMainThread(u32 entry_point, u32 priority);
 
 /**
  * Returns whether there are any threads that are ready to run.
