@@ -1,3 +1,18 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+|PR Number|Title|Author|Merge Success|
+|----|----|----|----|
+|[2](https://github.com/citra-emu/citra-canary/pull/2)|Canary Base|j-selby|true|
+|[2969](https://github.com/citra-emu/citra/pull/2969)|Service/PTM: Stub GetStepHistory function|mailwl|true|
+|[2953](https://github.com/citra-emu/citra/pull/2953)|HLE/APT: Always set up the APT parameter when starting a library applet.|Subv|true|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/blob/master/CONTRIBUTING.md#reporting-issues) FILE!!!**
 
 Citra Emulator
