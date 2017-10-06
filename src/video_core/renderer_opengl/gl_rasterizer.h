@@ -136,7 +136,7 @@ private:
     //       the end of a uniform block is included in UNIFORM_BLOCK_DATA_SIZE or not.
     //       Not following that rule will cause problems on some AMD drivers.
     struct UniformData {
-        alignas(8) GLvec2 framebuffer_scale;
+        GLint framebuffer_scale;
         GLint alphatest_ref;
         GLfloat depth_scale;
         GLfloat depth_offset;
@@ -156,7 +156,7 @@ private:
     };
 
     static_assert(
-        sizeof(UniformData) == 0x470,
+        sizeof(UniformData) == 0x460,
         "The size of the UniformData structure has changed, update the structure in the shader");
     static_assert(sizeof(UniformData) < 16384,
                   "UniformData structure must be less than 16kb as per the OpenGL spec");

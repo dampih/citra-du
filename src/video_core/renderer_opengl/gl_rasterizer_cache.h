@@ -39,8 +39,8 @@ using SurfaceInterval = SurfaceCache::interval_type;
 static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval_type>() &&
     std::is_same<SurfaceMap::interval_type, SurfaceCache::interval_type>(), "incorrect interval types");
 
-using SurfaceRect_Tuple = std::tuple<Surface, MathUtil::Rectangle<int>>;
-using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, MathUtil::Rectangle<int>>;
+using SurfaceRect_Tuple = std::tuple<Surface, MathUtil::Rectangle<u32>>;
+using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, MathUtil::Rectangle<u32>>;
 
 using PageMap = boost::icl::interval_map<u32, int>;
 
@@ -51,8 +51,6 @@ enum class ScaleMatch {
 };
 
 struct SurfaceParams {
-    explicit SurfaceParams();
-
     enum class PixelFormat {
         // First 5 formats are shared between textures and color buffers
         RGBA8 = 0,
@@ -200,19 +198,19 @@ struct SurfaceParams {
     }
 
     u32 GetScaledWidth() const {
-        return static_cast<u32>(width * res_scale_width);
+        return width * res_scale;
     }
 
     u32 GetScaledHeight() const {
-        return static_cast<u32>(height * res_scale_height);
+        return height * res_scale;
     }
 
-    MathUtil::Rectangle<int> GetRect() const {
-        return MathUtil::Rectangle<int>(0, 0, width, height);
+    MathUtil::Rectangle<u32> GetRect() const {
+        return { 0, 0, width, height };
     }
 
-    MathUtil::Rectangle<int> GetScaledRect() const {
-        return MathUtil::Rectangle<int>(0, 0, GetScaledWidth(), GetScaledHeight());
+    MathUtil::Rectangle<u32> GetScaledRect() const {
+        return { 0, 0, GetScaledWidth(), GetScaledHeight() };
     }
 
     u32 PixelsInBytes(u32 size) const {
@@ -226,8 +224,7 @@ struct SurfaceParams {
     u32 width = 0;
     u32 height = 0;
     u32 stride = 0;
-    float res_scale_width = 1.f;
-    float res_scale_height = 1.f;
+    u16 res_scale = 1;
 
     bool is_tiled = false;
     u32 bytes_per_pixel = 0;
@@ -239,11 +236,10 @@ struct CachedSurface : SurfaceParams {
     bool ExactMatch(const SurfaceParams& other_surface) const;
     bool CanSubRect(const SurfaceParams& sub_surface) const;
     bool CanCopy(const SurfaceParams& dest_surface) const;
-    //bool CanPartialCopy(const SurfaceParams& dest_surface) const;
     bool CanTexCopy(const SurfaceParams& texcopy_params) const;
 
-    MathUtil::Rectangle<int> GetSubRect(const SurfaceParams& sub_surface) const;
-    MathUtil::Rectangle<int> GetScaledSubRect(const SurfaceParams& sub_surface) const;
+    MathUtil::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
+    MathUtil::Rectangle<u32> GetScaledSubRect(const SurfaceParams& sub_surface) const;
 
     bool IsRegionValid(const SurfaceInterval& interval) const {
         return (invalid_regions.find(interval) == invalid_regions.end());
@@ -283,8 +279,8 @@ public:
     ~RasterizerCacheOpenGL();
 
     /// Blit one surface's texture to another
-    bool BlitSurfaces(const Surface& src_surface, const MathUtil::Rectangle<int>& src_rect,
-                      const Surface& dst_surface, const MathUtil::Rectangle<int>& dst_rect);
+    bool BlitSurfaces(const Surface& src_surface, const MathUtil::Rectangle<u32>& src_rect,
+                      const Surface& dst_surface, const MathUtil::Rectangle<u32>& dst_rect);
 
     /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
     Surface GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale, bool load_if_create);
@@ -334,4 +330,5 @@ private:
     SurfaceCache surface_cache;
     SurfaceMap dirty_regions;
     PageMap cached_pages;
+    SurfaceSet remove_surfaces;
 };

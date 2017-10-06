@@ -245,7 +245,7 @@ void RasterizerOpenGL::DrawTriangles() {
     // Sync and bind the framebuffer surfaces
     Surface color_surface;
     Surface depth_surface;
-    MathUtil::Rectangle<int> rect;
+    MathUtil::Rectangle<u32> rect;
     std::tie(color_surface, depth_surface, rect) =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
 
@@ -279,37 +279,32 @@ void RasterizerOpenGL::DrawTriangles() {
     const GLsizei viewport_height =
         static_cast<GLsizei>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2);
 
-    const float res_scale_width = color_surface != nullptr ? color_surface->res_scale_width :
-                                  (depth_surface == nullptr ? 1.0f : depth_surface->res_scale_width);
-    const float res_scale_height = color_surface != nullptr ? color_surface->res_scale_height :
-                                  (depth_surface == nullptr ? 1.0f : depth_surface->res_scale_height);
+    const u16 res_scale = color_surface != nullptr ? color_surface->res_scale :
+        (depth_surface == nullptr ? 1u : depth_surface->res_scale);
 
     glViewport(
-        static_cast<GLint>(rect.left + regs.rasterizer.viewport_corner.x * res_scale_width),
-        static_cast<GLint>(rect.bottom + regs.rasterizer.viewport_corner.y * res_scale_height),
-        static_cast<GLsizei>(viewport_width * res_scale_width),
-        static_cast<GLsizei>(viewport_height * res_scale_height));
+        static_cast<GLint>(rect.left + regs.rasterizer.viewport_corner.x * res_scale),
+        static_cast<GLint>(rect.bottom + regs.rasterizer.viewport_corner.y * res_scale),
+        viewport_width * res_scale,
+        viewport_height * res_scale);
 
-    if (uniform_block_data.data.framebuffer_scale[0] != res_scale_width ||
-        uniform_block_data.data.framebuffer_scale[1] != res_scale_height) {
-
-        uniform_block_data.data.framebuffer_scale[0] = res_scale_width;
-        uniform_block_data.data.framebuffer_scale[1] = res_scale_height;
+    if (uniform_block_data.data.framebuffer_scale != res_scale) {
+        uniform_block_data.data.framebuffer_scale = res_scale;
         uniform_block_data.dirty = true;
     }
 
     // Scissor checks are window-, not viewport-relative, which means that if the cached texture
     // sub-rect changes, the scissor bounds also need to be updated.
     GLint scissor_x1 = static_cast<GLint>(
-        rect.left + regs.rasterizer.scissor_test.x1 * res_scale_width);
+        rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
     GLint scissor_y1 = static_cast<GLint>(
-        rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale_height);
+        rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
     // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
     // scaling or doing multisampling.
     GLint scissor_x2 = static_cast<GLint>(
-        rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale_width);
+        rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
     GLint scissor_y2 = static_cast<GLint>(
-        rect.bottom + (regs.rasterizer.scissor_test.y2 + 1) * res_scale_height);
+        rect.bottom + (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
 
     if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
         uniform_block_data.data.scissor_x2 != scissor_x2 ||
@@ -959,16 +954,15 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
     dst_params.pixel_format = SurfaceParams::PixelFormatFromGPUPixelFormat(config.output_format);
     dst_params.UpdateParams();
 
-    MathUtil::Rectangle<int> src_rect;
+    MathUtil::Rectangle<u32> src_rect;
     Surface src_surface;
     std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
     if (src_surface == nullptr)
         return false;
 
-    dst_params.res_scale_width = src_surface->res_scale_width;
-    dst_params.res_scale_height = src_surface->res_scale_height;
+    dst_params.res_scale = src_surface->res_scale;
 
-    MathUtil::Rectangle<int> dst_rect;
+    MathUtil::Rectangle<u32> dst_rect;
     Surface dst_surface;
     std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
     if (dst_surface == nullptr)
@@ -1004,7 +998,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     src_params.size = ((src_params.height - 1) * src_params.stride) + src_params.width;
     src_params.end = src_params.addr + src_params.size;
 
-    MathUtil::Rectangle<int> src_rect;
+    MathUtil::Rectangle<u32> src_rect;
     Surface src_surface;
     std::tie(src_surface, src_rect) = res_cache.GetTexCopySurface(src_params);
     if (src_surface == nullptr)
@@ -1019,12 +1013,11 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     dst_params.stride = (output_width + output_gap) * src_surface->stride / src_params.stride;
     dst_params.width = output_width * src_surface->stride / src_params.stride;
     dst_params.height = src_surface->is_tiled ? src_params.height * 8 : src_params.height;
-    dst_params.res_scale_width = src_surface->res_scale_width;
-    dst_params.res_scale_height = src_surface->res_scale_height;
+    dst_params.res_scale = src_surface->res_scale;
     dst_params.UpdateParams();
 
     const bool load_gap = output_gap != 0; // Since we are going to invalidate the gap if there is one, we will have to load it first
-    MathUtil::Rectangle<int> dst_rect;
+    MathUtil::Rectangle<u32> dst_rect;
     Surface dst_surface;
     std::tie(dst_surface, dst_rect) = res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
     if (src_surface == nullptr)
@@ -1063,7 +1056,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     src_params.pixel_format = SurfaceParams::PixelFormatFromGPUPixelFormat(config.color_format);
     src_params.UpdateParams();
 
-    MathUtil::Rectangle<int> src_rect;
+    MathUtil::Rectangle<u32> src_rect;
     Surface src_surface;
     std::tie(src_surface, src_rect) = res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
 
