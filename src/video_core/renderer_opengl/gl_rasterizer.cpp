@@ -240,7 +240,7 @@ void RasterizerOpenGL::DrawTriangles() {
     const bool using_color_fb = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress() != 0 &&
                                 write_color_fb;
     const bool using_depth_fb = regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress() != 0 &&
-                                (state.depth.test_enabled || write_depth_fb);
+        (write_depth_fb || state.depth.test_enabled || (has_stencil && state.stencil.test_enabled));
 
     // Sync and bind the framebuffer surfaces
     Surface color_surface;

@@ -89,7 +89,7 @@ struct SurfaceParams {
     };
 
     static unsigned int GetFormatBpp(SurfaceParams::PixelFormat format) {
-        static const std::array<unsigned int, 18> bpp_table = {
+        static constexpr std::array<unsigned int, 18> bpp_table = {
             32, // RGBA8
             24, // RGB8
             16, // RGB5A1
@@ -110,8 +110,8 @@ struct SurfaceParams {
             32, // D24S8
         };
 
-        ASSERT((unsigned int)format < ARRAY_SIZE(bpp_table));
-        return bpp_table[(unsigned int)format];
+        ASSERT(static_cast<size_t>(format) < bpp_table.size());
+        return bpp_table[static_cast<size_t>(format)];
     }
 
     static PixelFormat PixelFormatFromTextureFormat(Pica::TexturingRegs::TextureFormat format) {
@@ -236,6 +236,7 @@ struct CachedSurface : SurfaceParams {
     bool ExactMatch(const SurfaceParams& other_surface) const;
     bool CanSubRect(const SurfaceParams& sub_surface) const;
     bool CanCopy(const SurfaceParams& dest_surface) const;
+    bool CanExpand(const SurfaceParams& expanded_surface) const;
     bool CanTexCopy(const SurfaceParams& texcopy_params) const;
 
     MathUtil::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
@@ -330,5 +331,4 @@ private:
     SurfaceCache surface_cache;
     SurfaceMap dirty_regions;
     PageMap cached_pages;
-    SurfaceSet remove_surfaces;
 };
