@@ -242,13 +242,37 @@ void RasterizerOpenGL::DrawTriangles() {
     const bool using_depth_fb = regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress() != 0 &&
         (write_depth_fb || state.depth.test_enabled || (has_stencil && state.stencil.test_enabled));
 
-    // Sync and bind the framebuffer surfaces
+    MathUtil::Rectangle<s32> viewport_rect_unscaled{
+        // These registers hold half-width and half-height, so must be multiplied by 2
+        regs.rasterizer.viewport_corner.x, // left
+        regs.rasterizer.viewport_corner.y + // top
+            static_cast<s32>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2),
+        regs.rasterizer.viewport_corner.x + // right
+            static_cast<s32>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2),
+        regs.rasterizer.viewport_corner.y // bottom
+    };
+
     Surface color_surface;
     Surface depth_surface;
-    MathUtil::Rectangle<u32> rect;
-    std::tie(color_surface, depth_surface, rect) =
-        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
+    MathUtil::Rectangle<u32> surfaces_rect;
+    std::tie(color_surface, depth_surface, surfaces_rect) =
+        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
 
+    const u16 res_scale = color_surface != nullptr ? color_surface->res_scale :
+        (depth_surface == nullptr ? 1u : depth_surface->res_scale);
+
+    MathUtil::Rectangle<u32> draw_rect{
+        MathUtil::Clamp(surfaces_rect.left + viewport_rect_unscaled.left * res_scale, // left
+                        surfaces_rect.left, surfaces_rect.right),
+        MathUtil::Clamp(surfaces_rect.bottom + viewport_rect_unscaled.GetHeight() * res_scale, // top
+                        surfaces_rect.bottom, surfaces_rect.top),
+        MathUtil::Clamp(surfaces_rect.left + viewport_rect_unscaled.GetWidth() * res_scale, // right
+                        surfaces_rect.left, surfaces_rect.right),
+        MathUtil::Clamp(surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale, // bottom
+                        surfaces_rect.bottom, surfaces_rect.top)
+    };
+
+    // Bind the framebuffer surfaces
     state.draw.draw_framebuffer = framebuffer.handle;
     state.Apply();
 
@@ -273,20 +297,11 @@ void RasterizerOpenGL::DrawTriangles() {
     }
 
     // Sync the viewport
-    // These registers hold half-width and half-height, so must be multiplied by 2
-    const GLsizei viewport_width =
-        static_cast<GLsizei>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() * 2);
-    const GLsizei viewport_height =
-        static_cast<GLsizei>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() * 2);
-
-    const u16 res_scale = color_surface != nullptr ? color_surface->res_scale :
-        (depth_surface == nullptr ? 1u : depth_surface->res_scale);
-
     glViewport(
-        static_cast<GLint>(rect.left + regs.rasterizer.viewport_corner.x * res_scale),
-        static_cast<GLint>(rect.bottom + regs.rasterizer.viewport_corner.y * res_scale),
-        viewport_width * res_scale,
-        viewport_height * res_scale);
+        static_cast<GLint>(surfaces_rect.left + viewport_rect_unscaled.left * res_scale),
+        static_cast<GLint>(surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale),
+        static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale),
+        static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale));
 
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
@@ -296,15 +311,15 @@ void RasterizerOpenGL::DrawTriangles() {
     // Scissor checks are window-, not viewport-relative, which means that if the cached texture
     // sub-rect changes, the scissor bounds also need to be updated.
     GLint scissor_x1 = static_cast<GLint>(
-        rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
+        surfaces_rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
     GLint scissor_y1 = static_cast<GLint>(
-        rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
+        surfaces_rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
     // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
     // scaling or doing multisampling.
     GLint scissor_x2 = static_cast<GLint>(
-        rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
+        surfaces_rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
     GLint scissor_y2 = static_cast<GLint>(
-        rect.bottom + (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
+        surfaces_rect.bottom + (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
 
     if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
         uniform_block_data.data.scissor_x2 != scissor_x2 ||
@@ -394,6 +409,15 @@ void RasterizerOpenGL::DrawTriangles() {
         uniform_block_data.dirty = false;
     }
 
+    // Viewport can have negative offsets or larger
+    // dimensions than our framebuffer sub-rect.
+    // Enable scissor test to prevent drawing
+    // outside of the framebuffer region
+    state.scissor.enabled = true;
+    state.scissor.x = draw_rect.left;
+    state.scissor.y = draw_rect.bottom;
+    state.scissor.width = draw_rect.GetWidth();
+    state.scissor.height = draw_rect.GetHeight();
     state.Apply();
 
     // Draw the vertex batch
@@ -401,29 +425,8 @@ void RasterizerOpenGL::DrawTriangles() {
                  GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_batch.size());
 
-    // Mark framebuffer surfaces as dirty
-    const u32 viewport_offset =
-        ((regs.framebuffer.framebuffer.GetHeight() - regs.rasterizer.viewport_corner.y - viewport_height)
-        * regs.framebuffer.framebuffer.GetWidth())
-        + regs.rasterizer.viewport_corner.x;
-
-    const u32 viewport_size = ((viewport_height - 1) * regs.framebuffer.framebuffer.GetWidth())
-        + viewport_width;
-
-    if (color_surface != nullptr && write_color_fb) {
-        res_cache.InvalidateRegion(
-            regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress()
-                + (viewport_offset * color_surface->bytes_per_pixel),
-            viewport_size * color_surface->bytes_per_pixel,
-            color_surface);
-    }
-    if (depth_surface != nullptr && write_depth_fb) {
-        res_cache.InvalidateRegion(
-            regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress()
-                + (viewport_offset * depth_surface->bytes_per_pixel),
-            viewport_size * depth_surface->bytes_per_pixel,
-            depth_surface);
-    }
+    // Disable scissor test
+    state.scissor.enabled = false;
 
     vertex_batch.clear();
 
@@ -432,6 +435,25 @@ void RasterizerOpenGL::DrawTriangles() {
         state.texture_units[texture_index].texture_2d = 0;
     }
     state.Apply();
+
+    // Mark framebuffer surfaces as dirty
+    MathUtil::Rectangle<u32> draw_rect_unscaled{
+        draw_rect.left / res_scale, draw_rect.top / res_scale,
+        draw_rect.right / res_scale, draw_rect.bottom / res_scale
+    };
+
+    if (color_surface != nullptr && write_color_fb) {
+        auto interval = color_surface->GetSubRectInterval(draw_rect_unscaled);
+        res_cache.InvalidateRegion(boost::icl::first(interval),
+                                   boost::icl::length(interval),
+                                   color_surface);
+    }
+    if (depth_surface != nullptr && write_depth_fb) {
+        auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
+        res_cache.InvalidateRegion(boost::icl::first(interval),
+                                   boost::icl::length(interval),
+                                   depth_surface);
+    }
 }
 
 void RasterizerOpenGL::NotifyPicaRegisterChanged(u32 id) {

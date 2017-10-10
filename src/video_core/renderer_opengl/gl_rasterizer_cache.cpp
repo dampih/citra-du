@@ -11,6 +11,7 @@
 #include <vector>
 #include <boost/range.hpp>
 #include <glad/glad.h>
+#include "common/alignment.h"
 #include "common/bit_field.h"
 #include "common/color.h"
 #include "common/logging/log.h"
@@ -312,7 +313,26 @@ static bool FillSurface(const Surface& surface, const u8* fill_data) {
     return true;
 }
 
-MathUtil::Rectangle<u32> CachedSurface::GetSubRect(const SurfaceParams& sub_surface) const {
+SurfaceInterval SurfaceParams::GetSubRectInterval(MathUtil::Rectangle<u32> unscaled_rect) const {
+    if (unscaled_rect.top > unscaled_rect.bottom) {
+        std::swap(unscaled_rect.top, unscaled_rect.bottom);
+    }
+    if (is_tiled) {
+        unscaled_rect.left = Common::AlignDown(unscaled_rect.left, 8);
+        unscaled_rect.top = Common::AlignDown(unscaled_rect.top, 8);
+        unscaled_rect.right = Common::AlignUp(unscaled_rect.right, 8);
+        unscaled_rect.bottom = Common::AlignUp(unscaled_rect.bottom, 8);
+    }
+
+    const u32 pixel_offset = unscaled_rect.left + stride *
+        (!is_tiled ? unscaled_rect.top : height - unscaled_rect.top - unscaled_rect.GetHeight());
+
+    const u32 pixels = (unscaled_rect.GetHeight() - 1) * stride + unscaled_rect.GetWidth();
+
+    return { addr + BytesInPixels(pixel_offset), addr + BytesInPixels(pixel_offset + pixels) };
+}
+
+MathUtil::Rectangle<u32> SurfaceParams::GetSubRect(const SurfaceParams& sub_surface) const {
     const u32 begin_pixel_index = PixelsInBytes(sub_surface.addr - addr);
     const int x0 = begin_pixel_index % stride;
     const int y0 = begin_pixel_index / stride;
@@ -323,7 +343,7 @@ MathUtil::Rectangle<u32> CachedSurface::GetSubRect(const SurfaceParams& sub_surf
     return MathUtil::Rectangle<u32>(x0, y0, x0 + sub_surface.width, y0 + sub_surface.height); // Top to bottom
 }
 
-MathUtil::Rectangle<u32> CachedSurface::GetScaledSubRect(const SurfaceParams& sub_surface) const {
+MathUtil::Rectangle<u32> SurfaceParams::GetScaledSubRect(const SurfaceParams& sub_surface) const {
     auto rect = GetSubRect(sub_surface);
     rect.left = rect.left * res_scale;
     rect.right = rect.right * res_scale;
@@ -332,7 +352,7 @@ MathUtil::Rectangle<u32> CachedSurface::GetScaledSubRect(const SurfaceParams& su
     return rect;
 }
 
-bool CachedSurface::ExactMatch(const SurfaceParams& other_surface) const {
+bool SurfaceParams::ExactMatch(const SurfaceParams& other_surface) const {
     return (other_surface.addr == addr &&
         other_surface.width == width &&
         other_surface.height == height &&
@@ -341,7 +361,7 @@ bool CachedSurface::ExactMatch(const SurfaceParams& other_surface) const {
         other_surface.is_tiled == is_tiled);
 }
 
-bool CachedSurface::CanSubRect(const SurfaceParams& sub_surface) const {
+bool SurfaceParams::CanSubRect(const SurfaceParams& sub_surface) const {
     if (sub_surface.addr < addr || sub_surface.end > end || sub_surface.stride != stride ||
         sub_surface.pixel_format != pixel_format || sub_surface.is_tiled != is_tiled)
         return false;
@@ -357,36 +377,7 @@ bool CachedSurface::CanSubRect(const SurfaceParams& sub_surface) const {
     return true;
 }
 
-bool CachedSurface::CanCopy(const SurfaceParams& dest_surface) const {
-    if (type == SurfaceType::Fill && IsRegionValid(dest_surface.GetInterval()) &&
-        dest_surface.addr >= addr && dest_surface.end <= end) { // dest_surface is within our fill range
-        if (fill_size != dest_surface.bytes_per_pixel) {
-            if (dest_surface.is_tiled && GetFormatBpp(dest_surface.pixel_format) * 8 % fill_size != 0)
-                return false;
-
-            // Check if bits repeat for our fill_size
-            const u32 dest_bytes_per_pixel = std::max(dest_surface.bytes_per_pixel, 1u); // Take care of 4bpp formats
-            std::vector<u8> fill_test(fill_size * dest_bytes_per_pixel);
-
-            for (u32 i = 0; i < dest_bytes_per_pixel; ++i)
-                std::memcpy(&fill_test[i * fill_size], &fill_data[0], fill_size);
-
-            for (u32 i = 0; i < fill_size; ++i)
-                if (std::memcmp(&fill_test[dest_bytes_per_pixel * i], &fill_test[0], dest_bytes_per_pixel) != 0)
-                    return false;
-
-            if (dest_surface.bytes_per_pixel == 0 && (fill_test[0] & 0xF) != (fill_test[0] >> 4)) // 4bpp compare
-                return false;
-        }
-        return true;
-    }
-    if (CanSubRect(dest_surface) && dest_surface.width == stride)
-        return true;
-
-    return false;
-}
-
-bool CachedSurface::CanExpand(const SurfaceParams& expanded_surface) const {
+bool SurfaceParams::CanExpand(const SurfaceParams& expanded_surface) const {
     if (pixel_format != expanded_surface.pixel_format ||
         is_tiled != expanded_surface.is_tiled ||
         addr > expanded_surface.end || expanded_surface.addr > end ||
@@ -402,7 +393,7 @@ bool CachedSurface::CanExpand(const SurfaceParams& expanded_surface) const {
     return x0 == 0 && (!is_tiled || y0 % 8 == 0);
 }
 
-bool CachedSurface::CanTexCopy(const SurfaceParams& texcopy_params) const {
+bool SurfaceParams::CanTexCopy(const SurfaceParams& texcopy_params) const {
     // TODO: Accept "Fill" surfaces
     if (pixel_format == PixelFormat::Invalid ||
         addr > texcopy_params.addr || end < texcopy_params.end ||
@@ -423,6 +414,35 @@ bool CachedSurface::CanTexCopy(const SurfaceParams& texcopy_params) const {
         PixelsInBytes(texcopy_params.width) % 64 == 0 &&
         PixelsInBytes(texcopy_params.stride) == stride * 8 &&
         x0 + PixelsInBytes(texcopy_params.width / 8) <= stride);
+}
+
+bool CachedSurface::CanCopy(const SurfaceParams& dest_surface) const {
+    if (type == SurfaceType::Fill && IsRegionValid(dest_surface.GetInterval()) &&
+        dest_surface.addr >= addr && dest_surface.end <= end) { // dest_surface is within our fill range
+        if (fill_size != dest_surface.BytesPerPixel()) {
+            if (dest_surface.is_tiled && BytesInPixels(8 * 8) % fill_size != 0)
+                return false;
+
+            // Check if bits repeat for our fill_size
+            const u32 dest_bytes_per_pixel = std::max(dest_surface.BytesPerPixel(), 1u); // Take care of 4bpp formats
+            std::vector<u8> fill_test(fill_size * dest_bytes_per_pixel);
+
+            for (u32 i = 0; i < dest_bytes_per_pixel; ++i)
+                std::memcpy(&fill_test[i * fill_size], &fill_data[0], fill_size);
+
+            for (u32 i = 0; i < fill_size; ++i)
+                if (std::memcmp(&fill_test[dest_bytes_per_pixel * i], &fill_test[0], dest_bytes_per_pixel) != 0)
+                    return false;
+
+            if (dest_surface.BytesPerPixel() == 0 && (fill_test[0] & 0xF) != (fill_test[0] >> 4)) // 4bpp compare
+                return false;
+        }
+        return true;
+    }
+    if (CanSubRect(dest_surface) && dest_surface.width == stride)
+        return true;
+
+    return false;
 }
 
 static void CopySurface(const Surface& src_surface, const Surface& dest_surface) {
@@ -492,7 +512,7 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
         }
         else {
             size_t copyfn_offset = MortonCopyFlags::MortonToGl;
-            copyfn_offset |= (bytes_per_pixel - 1) << MortonCopyFlags::BytesPerPixelBits;
+            copyfn_offset |= (BytesPerPixel() - 1) << MortonCopyFlags::BytesPerPixelBits;
             copyfn_offset |= (gl_bytes_per_pixel - 1) << MortonCopyFlags::GLBytesPerPixelBits;
 
             if (load_start != addr || load_end != end)
@@ -544,7 +564,7 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
         std::memcpy(dst_buffer + start_offset, &gl_buffer[start_offset], flush_end - flush_start);
     }
     else {
-        size_t copyfn_offset = (bytes_per_pixel - 1) << MortonCopyFlags::BytesPerPixelBits;
+        size_t copyfn_offset = (BytesPerPixel() - 1) << MortonCopyFlags::BytesPerPixelBits;
         copyfn_offset |= (gl_bytes_per_pixel - 1) << MortonCopyFlags::GLBytesPerPixelBits;
 
         if (flush_start != addr || flush_end != end)
@@ -806,7 +826,7 @@ SurfaceRect_Tuple RasterizerCacheOpenGL::GetSurfaceSubRect(const SurfaceParams& 
             new_params.addr = std::min(params.addr, surface->addr);
             new_params.end = std::max(params.end, surface->end);
             new_params.size = new_params.end - new_params.addr;
-            new_params.height = new_params.size / (SurfaceParams::GetFormatBpp(params.pixel_format) * params.stride / 8);
+            new_params.height = new_params.size / params.BytesInPixels(params.stride);
 
             Surface new_surface = CreateSurface(new_params);
             RegisterSurface(new_surface);
@@ -861,29 +881,11 @@ constexpr u16 GetResolutionScaleFactor() {
         Settings::values.resolution_factor;
 }
 
-SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(bool using_color_fb,
-                                                                       bool using_depth_fb) {
+SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
+                                                    bool using_color_fb, bool using_depth_fb,
+                                                    const MathUtil::Rectangle<s32>& viewport_rect) {
     const auto& regs = Pica::g_state.regs;
     const auto& config = regs.framebuffer.framebuffer;
-
-    // Make sur that framebuffers don't overlap if both color and depth are being used
-    u32 fb_area = config.GetWidth() * config.GetHeight();
-    bool framebuffers_overlap = using_color_fb && using_depth_fb &&
-        MathUtil::IntervalsIntersect(
-            config.GetColorBufferPhysicalAddress(),
-            fb_area * GPU::Regs::BytesPerPixel(GPU::Regs::PixelFormat(config.color_format.Value())),
-            config.GetDepthBufferPhysicalAddress(),
-            fb_area * Pica::FramebufferRegs::BytesPerDepthPixel(config.depth_format));
-
-    if (framebuffers_overlap) {
-        LOG_CRITICAL(Render_OpenGL, "Color and depth framebuffer memory regions overlap; overlapping framebuffers not supported!");
-        using_depth_fb = false;
-    }
-
-    // get color and depth surfaces
-    SurfaceParams color_params;
-    SurfaceParams depth_params;
-    color_params.is_tiled = depth_params.is_tiled = true;
 
     // update resolution_scale_factor and reset cache if changed
     static u16 resolution_scale_factor = GetResolutionScaleFactor();
@@ -893,38 +895,63 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(bool usin
         InvalidateRegion(0, 0xffffffff, nullptr);
     }
 
-    color_params.addr = config.GetColorBufferPhysicalAddress();
-    color_params.width = depth_params.width = config.GetWidth();
-    color_params.height = depth_params.height = config.GetHeight();
-    color_params.pixel_format = SurfaceParams::PixelFormatFromColorFormat(config.color_format);
+    MathUtil::Rectangle<u32> viewport_clamped{
+        static_cast<u32>(MathUtil::Clamp(viewport_rect.left, 0, static_cast<s32>(config.GetWidth()))),
+        static_cast<u32>(MathUtil::Clamp(viewport_rect.top, 0, static_cast<s32>(config.GetHeight()))),
+        static_cast<u32>(MathUtil::Clamp(viewport_rect.right, 0, static_cast<s32>(config.GetWidth()))),
+        static_cast<u32>(MathUtil::Clamp(viewport_rect.bottom, 0, static_cast<s32>(config.GetHeight())))
+    };
+
+    // get color and depth surfaces
+    SurfaceParams color_params;
+    color_params.is_tiled = true;
     color_params.res_scale = resolution_scale_factor;
+    color_params.width = config.GetWidth();
+    color_params.height = config.GetHeight();
+    SurfaceParams depth_params = color_params;
+
+    color_params.addr = config.GetColorBufferPhysicalAddress();
+    color_params.pixel_format = SurfaceParams::PixelFormatFromColorFormat(config.color_format);
     color_params.UpdateParams();
+
+    depth_params.addr = config.GetDepthBufferPhysicalAddress();
+    depth_params.pixel_format = SurfaceParams::PixelFormatFromDepthFormat(config.depth_format);
+    depth_params.UpdateParams();
+
+    auto color_vp_interval = color_params.GetSubRectInterval(viewport_clamped);
+    auto depth_vp_interval = depth_params.GetSubRectInterval(viewport_clamped);
+
+    // Make sur that framebuffers don't overlap if both color and depth are being used
+    if (using_color_fb && using_depth_fb &&
+        boost::icl::length(color_vp_interval & depth_vp_interval)) {
+        LOG_CRITICAL(Render_OpenGL, "Color and depth framebuffer memory regions overlap; overlapping framebuffers not supported!");
+        using_depth_fb = false;
+    }
 
     MathUtil::Rectangle<u32> rect{};
     Surface color_surface = nullptr;
-    if (using_color_fb)
-        std::tie(color_surface, rect) = GetSurfaceSubRect(color_params, ScaleMatch::Exact, true);
-
-    depth_params.pixel_format = SurfaceParams::PixelFormatFromDepthFormat(config.depth_format);
-    depth_params.addr = config.GetDepthBufferPhysicalAddress();
-    depth_params.res_scale = resolution_scale_factor;
-    depth_params.UpdateParams();
-
     Surface depth_surface = nullptr;
-    if (using_depth_fb && color_surface != nullptr) {
-        const PAddr validate_addr = depth_params.addr;
-        const u32 validate_size = depth_params.size;
+    if (using_color_fb)
+        std::tie(color_surface, rect) = GetSurfaceSubRect(color_params, ScaleMatch::Exact, false);
 
+    if (using_depth_fb && color_surface != nullptr) {
         // Can't specify separate color and depth viewport offsets in OpenGL, so make sure depth_surface will have the same offsets
-        depth_params.addr -= color_surface->PixelsInBytes(color_params.addr - color_surface->addr) * depth_params.bytes_per_pixel;
+        depth_params.addr -= depth_params.BytesInPixels(
+            color_surface->PixelsInBytes(color_params.addr - color_surface->addr));
         depth_params.height = color_surface->height;
         depth_params.UpdateParams();
 
         depth_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
-        ValidateSurface(depth_surface, validate_addr, validate_size);
     }
     else if (using_depth_fb) {
-        std::tie(depth_surface, rect) = GetSurfaceSubRect(depth_params, ScaleMatch::Exact, true);
+        std::tie(depth_surface, rect) = GetSurfaceSubRect(depth_params, ScaleMatch::Exact, false);
+    }
+
+    if (color_surface != nullptr) {
+        ValidateSurface(color_surface, boost::icl::first(color_vp_interval), boost::icl::length(color_vp_interval));
+    }
+    if (depth_surface != nullptr) {
+        ValidateSurface(depth_surface, boost::icl::first(depth_vp_interval), boost::icl::length(depth_vp_interval));
     }
 
     return { color_surface, depth_surface, rect };
@@ -1003,14 +1030,14 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         SurfaceParams params = *surface;
         const u32 pixel_offset = params.PixelsInBytes(interval_start - params.addr);
         if (!params.is_tiled) {
-            params.addr += (pixel_offset - (pixel_offset % params.width)) *
-                           SurfaceParams::GetFormatBpp(params.pixel_format) / 8; // Start of the row
-            params.height = (params.PixelsInBytes(interval_end - params.addr - 1) / params.width) + 1;
+            // Start of the row
+            params.addr += params.BytesInPixels(pixel_offset - (pixel_offset % params.stride));
+            params.height = (params.PixelsInBytes(interval_end - params.addr - 1) / params.stride) + 1;
         }
         else {
-            params.addr += (pixel_offset - (pixel_offset % (params.width * 8))) *
-                           SurfaceParams::GetFormatBpp(params.pixel_format) / 8; // Start of the tiled row
-            params.height = ((params.PixelsInBytes(interval_end - params.addr - 1) / (params.width * 8)) + 1) * 8;
+            // Start of the tiled row
+            params.addr += params.BytesInPixels(pixel_offset - (pixel_offset % (params.stride * 8)));
+            params.height = ((params.PixelsInBytes(interval_end - params.addr - 1) / (params.stride * 8)) + 1) * 8;
         }
         params.UpdateParams();
 
@@ -1147,7 +1174,7 @@ Surface RasterizerCacheOpenGL::CreateSurface(const SurfaceParams& params) {
     surface->gl_bytes_per_pixel =
         (surface->pixel_format == PixelFormat::D24 || surface->type == SurfaceType::Texture) ?
         4 :
-        surface->bytes_per_pixel;
+        surface->BytesPerPixel();
 
     surface->gl_buffer_offset = (surface->pixel_format == PixelFormat::D24) ? 1 : 0;
 

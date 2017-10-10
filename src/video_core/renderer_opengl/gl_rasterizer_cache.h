@@ -179,7 +179,7 @@ struct SurfaceParams {
         return SurfaceType::Invalid;
     }
 
-    /// Update the params "size", "end", "bytes_per_pixel" and "type" from the already set "addr", "width", "height" and "pixel_format"
+    /// Update the params "size", "end" and "type" from the already set "addr", "width", "height" and "pixel_format"
     void UpdateParams() {
         size = width * height * GetFormatBpp(pixel_format) / 8;
 
@@ -190,12 +190,13 @@ struct SurfaceParams {
 
         end = addr + size;
         type = GetFormatType(pixel_format);
-        bytes_per_pixel = GetFormatBpp(pixel_format) / 8;
     }
 
     SurfaceInterval GetInterval() const {
         return SurfaceInterval::right_open(addr, end);
     }
+
+    SurfaceInterval GetSubRectInterval(MathUtil::Rectangle<u32> unscaled_rect) const;
 
     u32 GetScaledWidth() const {
         return width * res_scale;
@@ -217,6 +218,22 @@ struct SurfaceParams {
         return size * 8 / GetFormatBpp(pixel_format);
     }
 
+    u32 BytesInPixels(u32 pixels) const {
+        return pixels * GetFormatBpp(pixel_format) / 8;
+    }
+
+    u32 BytesPerPixel() const {
+        return BytesInPixels(1);
+    }
+
+    bool ExactMatch(const SurfaceParams& other_surface) const;
+    bool CanSubRect(const SurfaceParams& sub_surface) const;
+    bool CanExpand(const SurfaceParams& expanded_surface) const;
+    bool CanTexCopy(const SurfaceParams& texcopy_params) const;
+
+    MathUtil::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
+    MathUtil::Rectangle<u32> GetScaledSubRect(const SurfaceParams& sub_surface) const;
+
     PAddr addr = 0;
     PAddr end = 0;
     u32 size = 0;
@@ -227,20 +244,12 @@ struct SurfaceParams {
     u16 res_scale = 1;
 
     bool is_tiled = false;
-    u32 bytes_per_pixel = 0;
     PixelFormat pixel_format = PixelFormat::Invalid;
     SurfaceType type = SurfaceType::Invalid;
 };
 
 struct CachedSurface : SurfaceParams {
-    bool ExactMatch(const SurfaceParams& other_surface) const;
-    bool CanSubRect(const SurfaceParams& sub_surface) const;
     bool CanCopy(const SurfaceParams& dest_surface) const;
-    bool CanExpand(const SurfaceParams& expanded_surface) const;
-    bool CanTexCopy(const SurfaceParams& texcopy_params) const;
-
-    MathUtil::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
-    MathUtil::Rectangle<u32> GetScaledSubRect(const SurfaceParams& sub_surface) const;
 
     bool IsRegionValid(const SurfaceInterval& interval) const {
         return (invalid_regions.find(interval) == invalid_regions.end());
@@ -295,7 +304,8 @@ public:
     Surface GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config);
 
     /// Get the color and depth surfaces based on the framebuffer configuration
-    SurfaceSurfaceRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
+    SurfaceSurfaceRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
+                                                    const MathUtil::Rectangle<s32>& viewport_rect);
 
     /// Get a surface that matches the fill config
     Surface GetFillSurface(const GPU::Regs::MemoryFillConfig& config);
