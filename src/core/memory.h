@@ -7,7 +7,14 @@
 #include <array>
 #include <cstddef>
 #include <string>
+#include <vector>
+#include <boost/optional.hpp>
 #include "common/common_types.h"
+#include "core/mmio.h"
+
+namespace Kernel {
+class Process;
+}
 
 namespace Memory {
 
@@ -19,6 +26,59 @@ const u32 PAGE_SIZE = 0x1000;
 const u32 PAGE_MASK = PAGE_SIZE - 1;
 const int PAGE_BITS = 12;
 const size_t PAGE_TABLE_NUM_ENTRIES = 1 << (32 - PAGE_BITS);
+
+enum class PageType {
+    /// Page is unmapped and should cause an access error.
+    Unmapped,
+    /// Page is mapped to regular memory. This is the only type you can get pointers to.
+    Memory,
+    /// Page is mapped to regular memory, but also needs to check for rasterizer cache flushing and
+    /// invalidation
+    RasterizerCachedMemory,
+    /// Page is mapped to a I/O region. Writing and reading to this page is handled by functions.
+    Special,
+    /// Page is mapped to a I/O region, but also needs to check for rasterizer cache flushing and
+    /// invalidation
+    RasterizerCachedSpecial,
+};
+
+struct SpecialRegion {
+    VAddr base;
+    u32 size;
+    MMIORegionPointer handler;
+};
+
+/**
+ * A (reasonably) fast way of allowing switchable and remappable process address spaces. It loosely
+ * mimics the way a real CPU page table works, but instead is optimized for minimal decoding and
+ * fetching requirements when accessing. In the usual case of an access to regular memory, it only
+ * requires an indexed fetch and a check for NULL.
+ */
+struct PageTable {
+    /**
+     * Array of memory pointers backing each page. An entry can only be non-null if the
+     * corresponding entry in the `attributes` array is of type `Memory`.
+     */
+    std::array<u8*, PAGE_TABLE_NUM_ENTRIES> pointers;
+
+    /**
+     * Contains MMIO handlers that back memory regions whose entries in the `attribute` array is of
+     * type `Special`.
+     */
+    std::vector<SpecialRegion> special_regions;
+
+    /**
+     * Array of fine grained page attributes. If it is set to any value other than `Memory`, then
+     * the corresponding entry in `pointers` MUST be set to null.
+     */
+    std::array<PageType, PAGE_TABLE_NUM_ENTRIES> attributes;
+
+    /**
+     * Indicates the number of externally cached resources touching a page that should be
+     * flushed before the memory is accessed
+     */
+    std::array<u8, PAGE_TABLE_NUM_ENTRIES> cached_res_count;
+};
 
 /// Physical memory regions as seen from the ARM11
 enum : PAddr {
@@ -55,8 +115,10 @@ enum : PAddr {
 
     /// Main FCRAM
     FCRAM_PADDR = 0x20000000,
-    FCRAM_SIZE = 0x08000000, ///< FCRAM size (128MB)
+    FCRAM_SIZE = 0x08000000,      ///< FCRAM size on the Old 3DS (128MB)
+    FCRAM_N3DS_SIZE = 0x10000000, ///< FCRAM size on the New 3DS (256MB)
     FCRAM_PADDR_END = FCRAM_PADDR + FCRAM_SIZE,
+    FCRAM_N3DS_PADDR_END = FCRAM_PADDR + FCRAM_N3DS_SIZE,
 };
 
 /// Virtual user-space memory regions
@@ -123,7 +185,14 @@ enum : VAddr {
     NEW_LINEAR_HEAP_VADDR_END = NEW_LINEAR_HEAP_VADDR + NEW_LINEAR_HEAP_SIZE,
 };
 
+/// Currently active page table
+void SetCurrentPageTable(PageTable* page_table);
+PageTable* GetCurrentPageTable();
+
+/// Determines if the given VAddr is valid for the specified process.
+bool IsValidVirtualAddress(const Kernel::Process& process, const VAddr vaddr);
 bool IsValidVirtualAddress(const VAddr addr);
+
 bool IsValidPhysicalAddress(const PAddr addr);
 
 u8 Read8(VAddr addr);
@@ -136,7 +205,11 @@ void Write16(VAddr addr, u16 data);
 void Write32(VAddr addr, u32 data);
 void Write64(VAddr addr, u64 data);
 
+void ReadBlock(const Kernel::Process& process, const VAddr src_addr, void* dest_buffer,
+               size_t size);
 void ReadBlock(const VAddr src_addr, void* dest_buffer, size_t size);
+void WriteBlock(const Kernel::Process& process, const VAddr dest_addr, const void* src_buffer,
+                size_t size);
 void WriteBlock(const VAddr dest_addr, const void* src_buffer, size_t size);
 void ZeroBlock(const VAddr dest_addr, const size_t size);
 void CopyBlock(VAddr dest_addr, VAddr src_addr, size_t size);
@@ -146,20 +219,26 @@ u8* GetPointer(VAddr virtual_address);
 std::string ReadCString(VAddr virtual_address, std::size_t max_length);
 
 /**
-* Converts a virtual address inside a region with 1:1 mapping to physical memory to a physical
-* address. This should be used by services to translate addresses for use by the hardware.
-*/
+ * Converts a virtual address inside a region with 1:1 mapping to physical memory to a physical
+ * address. This should be used by services to translate addresses for use by the hardware.
+ */
+boost::optional<PAddr> TryVirtualToPhysicalAddress(VAddr addr);
+
+/**
+ * Converts a virtual address inside a region with 1:1 mapping to physical memory to a physical
+ * address. This should be used by services to translate addresses for use by the hardware.
+ *
+ * @deprecated Use TryVirtualToPhysicalAddress(), which reports failure.
+ */
 PAddr VirtualToPhysicalAddress(VAddr addr);
 
 /**
-* Undoes a mapping performed by VirtualToPhysicalAddress().
-*/
-VAddr PhysicalToVirtualAddress(PAddr addr);
+ * Undoes a mapping performed by VirtualToPhysicalAddress().
+ */
+boost::optional<VAddr> PhysicalToVirtualAddress(PAddr addr);
 
 /**
  * Gets a pointer to the memory region beginning at the specified physical address.
- *
- * @note This is currently implemented using PhysicalToVirtualAddress().
  */
 u8* GetPhysicalPointer(PAddr address);
 
@@ -179,10 +258,17 @@ void RasterizerFlushRegion(PAddr start, u32 size);
  */
 void RasterizerFlushAndInvalidateRegion(PAddr start, u32 size);
 
+enum class FlushMode {
+    /// Write back modified surfaces to RAM
+    Flush,
+    /// Write back modified surfaces to RAM, and also remove them from the cache
+    FlushAndInvalidate,
+};
+
 /**
- * Dynarmic has an optimization to memory accesses when the pointer to the page exists that
- * can be used by setting up the current page table as a callback. This function is used to
- * retrieve the current page table for that purpose.
+ * Flushes and invalidates any externally cached rasterizer resources touching the given virtual
+ * address region.
  */
-std::array<u8*, PAGE_TABLE_NUM_ENTRIES>* GetCurrentPageTablePointers();
-}
+void RasterizerFlushVirtualRegion(VAddr start, u32 size, FlushMode mode);
+
+} // namespace Memory

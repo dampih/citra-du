@@ -76,6 +76,11 @@ void Config::ReadValues() {
             Settings::values.analogs[i] = default_param;
     }
 
+    Settings::values.motion_device = sdl2_config->Get(
+        "Controls", "motion_device", "engine:motion_emu,update_period:100,sensitivity:0.01");
+    Settings::values.touch_device =
+        sdl2_config->Get("Controls", "touch_device", "engine:emu_window");
+
     // Core
     Settings::values.use_cpu_jit = sdl2_config->GetBoolean("Core", "use_cpu_jit", true);
 
@@ -88,9 +93,9 @@ void Config::ReadValues() {
     Settings::values.toggle_framelimit =
         sdl2_config->GetBoolean("Renderer", "toggle_framelimit", true);
 
-    Settings::values.bg_red = (float)sdl2_config->GetReal("Renderer", "bg_red", 1.0);
-    Settings::values.bg_green = (float)sdl2_config->GetReal("Renderer", "bg_green", 1.0);
-    Settings::values.bg_blue = (float)sdl2_config->GetReal("Renderer", "bg_blue", 1.0);
+    Settings::values.bg_red = (float)sdl2_config->GetReal("Renderer", "bg_red", 0.0);
+    Settings::values.bg_green = (float)sdl2_config->GetReal("Renderer", "bg_green", 0.0);
+    Settings::values.bg_blue = (float)sdl2_config->GetReal("Renderer", "bg_blue", 0.0);
 
     // Layout
     Settings::values.layout_option =
@@ -151,6 +156,16 @@ void Config::ReadValues() {
     Settings::values.use_gdbstub = sdl2_config->GetBoolean("Debugging", "use_gdbstub", false);
     Settings::values.gdbstub_port =
         static_cast<u16>(sdl2_config->GetInteger("Debugging", "gdbstub_port", 24689));
+
+    // Web Service
+    Settings::values.enable_telemetry =
+        sdl2_config->GetBoolean("WebService", "enable_telemetry", true);
+    Settings::values.telemetry_endpoint_url = sdl2_config->Get(
+        "WebService", "telemetry_endpoint_url", "https://services.citra-emu.org/api/telemetry");
+    Settings::values.verify_endpoint_url = sdl2_config->Get(
+        "WebService", "verify_endpoint_url", "https://services.citra-emu.org/api/profile");
+    Settings::values.citra_username = sdl2_config->Get("WebService", "citra_username", "");
+    Settings::values.citra_token = sdl2_config->Get("WebService", "citra_token", "");
 }
 
 void Config::Reload() {

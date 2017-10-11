@@ -147,10 +147,12 @@ void Process::Run(s32 main_thread_priority, u32 stack_size) {
     }
 
     vm_manager.LogLayout(Log::Level::Debug);
-    Kernel::SetupMainThread(codeset->entrypoint, main_thread_priority);
+    Kernel::SetupMainThread(codeset->entrypoint, main_thread_priority, this);
 }
 
 VAddr Process::GetLinearHeapAreaAddress() const {
+    // Starting from system version 8.0.0 a new linear heap layout is supported to allow usage of
+    // the extra RAM in the n3DS.
     return kernel_version < 0x22C ? Memory::LINEAR_HEAP_VADDR : Memory::NEW_LINEAR_HEAP_VADDR;
 }
 

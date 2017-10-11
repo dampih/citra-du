@@ -38,7 +38,7 @@
 #include "core/hle/service/news/news.h"
 #include "core/hle/service/nfc/nfc.h"
 #include "core/hle/service/nim/nim.h"
-#include "core/hle/service/ns_s.h"
+#include "core/hle/service/ns/ns.h"
 #include "core/hle/service/nwm/nwm.h"
 #include "core/hle/service/pm_app.h"
 #include "core/hle/service/ptm/ptm.h"
@@ -173,8 +173,7 @@ void ServiceFrameworkBase::HandleSyncRequest(SharedPtr<ServerSession> server_ses
 
     // TODO(yuriks): The kernel should be the one handling this as part of translation after
     // everything else is migrated
-    Kernel::HLERequestContext context;
-    context.session = std::move(server_session);
+    Kernel::HLERequestContext context(std::move(server_session));
     context.PopulateFromIncomingCommandBuffer(cmd_buf, *Kernel::g_current_process,
                                               Kernel::g_handle_table);
 
@@ -207,7 +206,7 @@ void AddService(Interface* interface_) {
     auto server_port =
         SM::g_service_manager
             ->RegisterService(interface_->GetPortName(), interface_->GetMaxSessions())
-            .MoveFrom();
+            .Unwrap();
     server_port->SetHleHandler(std::shared_ptr<Interface>(interface_));
 }
 
@@ -215,6 +214,8 @@ void AddService(Interface* interface_) {
 void Init() {
     SM::g_service_manager = std::make_shared<SM::ServiceManager>();
     SM::ServiceManager::InstallInterfaces(SM::g_service_manager);
+
+    NS::InstallInterfaces(*SM::g_service_manager);
 
     AddNamedPort(new ERR::ERR_F);
 
@@ -247,7 +248,6 @@ void Init() {
     AddService(new HTTP::HTTP_C);
     AddService(new LDR::LDR_RO);
     AddService(new MIC::MIC_U);
-    AddService(new NS::NS_S);
     AddService(new PM::PM_APP);
     AddService(new SOC::SOC_U);
     AddService(new SSL::SSL_C);

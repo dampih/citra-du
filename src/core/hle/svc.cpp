@@ -25,19 +25,22 @@
 #include "core/hle/kernel/semaphore.h"
 #include "core/hle/kernel/server_port.h"
 #include "core/hle/kernel/server_session.h"
+#include "core/hle/kernel/session.h"
 #include "core/hle/kernel/shared_memory.h"
 #include "core/hle/kernel/thread.h"
 #include "core/hle/kernel/timer.h"
 #include "core/hle/kernel/vm_manager.h"
 #include "core/hle/kernel/wait_object.h"
+#include "core/hle/lock.h"
 #include "core/hle/result.h"
 #include "core/hle/service/service.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Namespace SVC
 
-using Kernel::SharedPtr;
 using Kernel::ERR_INVALID_HANDLE;
+using Kernel::Handle;
+using Kernel::SharedPtr;
 
 namespace SVC {
 
@@ -198,17 +201,21 @@ static ResultCode UnmapMemoryBlock(Kernel::Handle handle, u32 addr) {
 }
 
 /// Connect to an OS service given the port name, returns the handle to the port to out
-static ResultCode ConnectToPort(Kernel::Handle* out_handle, const char* port_name) {
-    if (port_name == nullptr)
+static ResultCode ConnectToPort(Kernel::Handle* out_handle, VAddr port_name_address) {
+    if (!Memory::IsValidVirtualAddress(port_name_address))
         return Kernel::ERR_NOT_FOUND;
-    if (std::strlen(port_name) > 11)
+
+    static constexpr std::size_t PortNameMaxLength = 11;
+    // Read 1 char beyond the max allowed port name to detect names that are too long.
+    std::string port_name = Memory::ReadCString(port_name_address, PortNameMaxLength + 1);
+    if (port_name.size() > PortNameMaxLength)
         return Kernel::ERR_PORT_NAME_TOO_LONG;
 
-    LOG_TRACE(Kernel_SVC, "called port_name=%s", port_name);
+    LOG_TRACE(Kernel_SVC, "called port_name=%s", port_name.c_str());
 
     auto it = Service::g_kernel_named_ports.find(port_name);
     if (it == Service::g_kernel_named_ports.end()) {
-        LOG_WARNING(Kernel_SVC, "tried to connect to unknown port: %s", port_name);
+        LOG_WARNING(Kernel_SVC, "tried to connect to unknown port: %s", port_name.c_str());
         return Kernel::ERR_NOT_FOUND;
     }
 
@@ -236,7 +243,7 @@ static ResultCode SendSyncRequest(Kernel::Handle handle) {
 
     // TODO(Subv): svcSendSyncRequest should put the caller thread to sleep while the server
     // responds and cause a reschedule.
-    return session->SendSyncRequest();
+    return session->SendSyncRequest(Kernel::GetCurrentThread());
 }
 
 /// Close a handle
@@ -268,6 +275,24 @@ static ResultCode WaitSynchronization1(Kernel::Handle handle, s64 nano_seconds) 
         // Create an event to wake the thread up after the specified nanosecond delay has passed
         thread->WakeAfterDelay(nano_seconds);
 
+        thread->wakeup_callback = [](ThreadWakeupReason reason,
+                                     Kernel::SharedPtr<Kernel::Thread> thread,
+                                     Kernel::SharedPtr<Kernel::WaitObject> object) {
+
+            ASSERT(thread->status == THREADSTATUS_WAIT_SYNCH_ANY);
+
+            if (reason == ThreadWakeupReason::Timeout) {
+                thread->SetWaitSynchronizationResult(Kernel::RESULT_TIMEOUT);
+                return;
+            }
+
+            ASSERT(reason == ThreadWakeupReason::Signal);
+            thread->SetWaitSynchronizationResult(RESULT_SUCCESS);
+
+            // WaitSynchronization1 doesn't have an output index like WaitSynchronizationN, so we
+            // don't have to do anything else here.
+        };
+
         Core::System::GetInstance().PrepareReschedule();
 
         // Note: The output of this SVC will be set to RESULT_SUCCESS if the thread
@@ -282,12 +307,11 @@ static ResultCode WaitSynchronization1(Kernel::Handle handle, s64 nano_seconds) 
 }
 
 /// Wait for the given handles to synchronize, timeout after the specified nanoseconds
-static ResultCode WaitSynchronizationN(s32* out, Kernel::Handle* handles, s32 handle_count,
+static ResultCode WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle_count,
                                        bool wait_all, s64 nano_seconds) {
     Kernel::Thread* thread = Kernel::GetCurrentThread();
 
-    // Check if 'handles' is invalid
-    if (handles == nullptr)
+    if (!Memory::IsValidVirtualAddress(handles_address))
         return Kernel::ERR_INVALID_POINTER;
 
     // NOTE: on real hardware, there is no nullptr check for 'out' (tested with firmware 4.4). If
@@ -302,7 +326,8 @@ static ResultCode WaitSynchronizationN(s32* out, Kernel::Handle* handles, s32 ha
     std::vector<ObjectPtr> objects(handle_count);
 
     for (int i = 0; i < handle_count; ++i) {
-        auto object = Kernel::g_handle_table.Get<Kernel::WaitObject>(handles[i]);
+        Kernel::Handle handle = Memory::Read32(handles_address + i * sizeof(Kernel::Handle));
+        auto object = Kernel::g_handle_table.Get<Kernel::WaitObject>(handle);
         if (object == nullptr)
             return ERR_INVALID_HANDLE;
         objects[i] = object;
@@ -341,6 +366,23 @@ static ResultCode WaitSynchronizationN(s32* out, Kernel::Handle* handles, s32 ha
         // Create an event to wake the thread up after the specified nanosecond delay has passed
         thread->WakeAfterDelay(nano_seconds);
 
+        thread->wakeup_callback = [](ThreadWakeupReason reason,
+                                     Kernel::SharedPtr<Kernel::Thread> thread,
+                                     Kernel::SharedPtr<Kernel::WaitObject> object) {
+
+            ASSERT(thread->status == THREADSTATUS_WAIT_SYNCH_ALL);
+
+            if (reason == ThreadWakeupReason::Timeout) {
+                thread->SetWaitSynchronizationResult(Kernel::RESULT_TIMEOUT);
+                return;
+            }
+
+            ASSERT(reason == ThreadWakeupReason::Signal);
+
+            thread->SetWaitSynchronizationResult(RESULT_SUCCESS);
+            // The wait_all case does not update the output index.
+        };
+
         Core::System::GetInstance().PrepareReschedule();
 
         // This value gets set to -1 by default in this case, it is not modified after this.
@@ -358,7 +400,7 @@ static ResultCode WaitSynchronizationN(s32* out, Kernel::Handle* handles, s32 ha
             // We found a ready object, acquire it and set the result value
             Kernel::WaitObject* object = itr->get();
             object->Acquire(thread);
-            *out = std::distance(objects.begin(), itr);
+            *out = static_cast<s32>(std::distance(objects.begin(), itr));
             return RESULT_SUCCESS;
         }
 
@@ -386,15 +428,147 @@ static ResultCode WaitSynchronizationN(s32* out, Kernel::Handle* handles, s32 ha
         // Create an event to wake the thread up after the specified nanosecond delay has passed
         thread->WakeAfterDelay(nano_seconds);
 
+        thread->wakeup_callback = [](ThreadWakeupReason reason,
+                                     Kernel::SharedPtr<Kernel::Thread> thread,
+                                     Kernel::SharedPtr<Kernel::WaitObject> object) {
+
+            ASSERT(thread->status == THREADSTATUS_WAIT_SYNCH_ANY);
+
+            if (reason == ThreadWakeupReason::Timeout) {
+                thread->SetWaitSynchronizationResult(Kernel::RESULT_TIMEOUT);
+                return;
+            }
+
+            ASSERT(reason == ThreadWakeupReason::Signal);
+
+            thread->SetWaitSynchronizationResult(RESULT_SUCCESS);
+            thread->SetWaitSynchronizationOutput(thread->GetWaitObjectIndex(object.get()));
+        };
+
         Core::System::GetInstance().PrepareReschedule();
 
         // Note: The output of this SVC will be set to RESULT_SUCCESS if the thread resumes due to a
         // signal in one of its wait objects.
         // Otherwise we retain the default value of timeout, and -1 in the out parameter
-        thread->wait_set_output = true;
         *out = -1;
         return Kernel::RESULT_TIMEOUT;
     }
+}
+
+/// In a single operation, sends a IPC reply and waits for a new request.
+static ResultCode ReplyAndReceive(s32* index, VAddr handles_address, s32 handle_count,
+                                  Kernel::Handle reply_target) {
+    if (!Memory::IsValidVirtualAddress(handles_address))
+        return Kernel::ERR_INVALID_POINTER;
+
+    // Check if 'handle_count' is invalid
+    if (handle_count < 0)
+        return Kernel::ERR_OUT_OF_RANGE;
+
+    using ObjectPtr = SharedPtr<Kernel::WaitObject>;
+    std::vector<ObjectPtr> objects(handle_count);
+
+    for (int i = 0; i < handle_count; ++i) {
+        Kernel::Handle handle = Memory::Read32(handles_address + i * sizeof(Kernel::Handle));
+        auto object = Kernel::g_handle_table.Get<Kernel::WaitObject>(handle);
+        if (object == nullptr)
+            return ERR_INVALID_HANDLE;
+        objects[i] = object;
+    }
+
+    // We are also sending a command reply.
+    // Do not send a reply if the command id in the command buffer is 0xFFFF.
+    u32* cmd_buff = Kernel::GetCommandBuffer();
+    IPC::Header header{cmd_buff[0]};
+    if (reply_target != 0 && header.command_id != 0xFFFF) {
+        auto session = Kernel::g_handle_table.Get<Kernel::ServerSession>(reply_target);
+        if (session == nullptr)
+            return ERR_INVALID_HANDLE;
+
+        auto request_thread = std::move(session->currently_handling);
+
+        // Mark the request as "handled".
+        session->currently_handling = nullptr;
+
+        // Error out if there's no request thread or the session was closed.
+        // TODO(Subv): Is the same error code (ClosedByRemote) returned for both of these cases?
+        if (request_thread == nullptr || session->parent->client == nullptr) {
+            *index = -1;
+            return Kernel::ERR_SESSION_CLOSED_BY_REMOTE;
+        }
+
+        // TODO(Subv): Perform IPC translation from the current thread to request_thread.
+
+        // Note: The scheduler is not invoked here.
+        request_thread->ResumeFromWait();
+    }
+
+    if (handle_count == 0) {
+        *index = 0;
+        // The kernel uses this value as a placeholder for the real error, and returns it when we
+        // pass no handles and do not perform any reply.
+        if (reply_target == 0 || header.command_id == 0xFFFF)
+            return ResultCode(0xE7E3FFFF);
+
+        return RESULT_SUCCESS;
+    }
+
+    auto thread = Kernel::GetCurrentThread();
+
+    // Find the first object that is acquirable in the provided list of objects
+    auto itr = std::find_if(objects.begin(), objects.end(), [thread](const ObjectPtr& object) {
+        return !object->ShouldWait(thread);
+    });
+
+    if (itr != objects.end()) {
+        // We found a ready object, acquire it and set the result value
+        Kernel::WaitObject* object = itr->get();
+        object->Acquire(thread);
+        *index = static_cast<s32>(std::distance(objects.begin(), itr));
+
+        if (object->GetHandleType() == Kernel::HandleType::ServerSession) {
+            auto server_session = static_cast<Kernel::ServerSession*>(object);
+            if (server_session->parent->client == nullptr)
+                return Kernel::ERR_SESSION_CLOSED_BY_REMOTE;
+
+            // TODO(Subv): Perform IPC translation from the ServerSession to the current thread.
+        }
+        return RESULT_SUCCESS;
+    }
+
+    // No objects were ready to be acquired, prepare to suspend the thread.
+
+    // Put the thread to sleep
+    thread->status = THREADSTATUS_WAIT_SYNCH_ANY;
+
+    // Add the thread to each of the objects' waiting threads.
+    for (size_t i = 0; i < objects.size(); ++i) {
+        Kernel::WaitObject* object = objects[i].get();
+        object->AddWaitingThread(thread);
+    }
+
+    thread->wait_objects = std::move(objects);
+
+    thread->wakeup_callback = [](ThreadWakeupReason reason,
+                                 Kernel::SharedPtr<Kernel::Thread> thread,
+                                 Kernel::SharedPtr<Kernel::WaitObject> object) {
+
+        ASSERT(thread->status == THREADSTATUS_WAIT_SYNCH_ANY);
+        ASSERT(reason == ThreadWakeupReason::Signal);
+
+        thread->SetWaitSynchronizationResult(RESULT_SUCCESS);
+        thread->SetWaitSynchronizationOutput(thread->GetWaitObjectIndex(object.get()));
+
+        // TODO(Subv): Perform IPC translation upon wakeup.
+    };
+
+    Core::System::GetInstance().PrepareReschedule();
+
+    // Note: The output of this SVC will be set to RESULT_SUCCESS if the thread resumes due to a
+    // signal in one of its wait objects, or to 0xC8A01836 if there was a translation error.
+    // By default the index is set to -1.
+    *index = -1;
+    return RESULT_SUCCESS;
 }
 
 /// Create an address arbiter (to allocate access to shared resources)
@@ -449,8 +623,10 @@ static void Break(u8 break_reason) {
 }
 
 /// Used to output a message on a debug hardware unit - does nothing on a retail unit
-static void OutputDebugString(const char* string, int len) {
-    LOG_DEBUG(Debug_Emulated, "%.*s", len, string);
+static void OutputDebugString(VAddr address, int len) {
+    std::vector<char> string(len);
+    Memory::ReadBlock(address, string.data(), len);
+    LOG_DEBUG(Debug_Emulated, "%.*s", len, string.data());
 }
 
 /// Get resource limit
@@ -468,9 +644,9 @@ static ResultCode GetResourceLimit(Kernel::Handle* resource_limit, Kernel::Handl
 }
 
 /// Get resource limit current values
-static ResultCode GetResourceLimitCurrentValues(s64* values, Kernel::Handle resource_limit_handle,
-                                                u32* names, u32 name_count) {
-    LOG_TRACE(Kernel_SVC, "called resource_limit=%08X, names=%p, name_count=%d",
+static ResultCode GetResourceLimitCurrentValues(VAddr values, Kernel::Handle resource_limit_handle,
+                                                VAddr names, u32 name_count) {
+    LOG_TRACE(Kernel_SVC, "called resource_limit=%08X, names=%08X, name_count=%d",
               resource_limit_handle, names, name_count);
 
     SharedPtr<Kernel::ResourceLimit> resource_limit =
@@ -478,16 +654,19 @@ static ResultCode GetResourceLimitCurrentValues(s64* values, Kernel::Handle reso
     if (resource_limit == nullptr)
         return ERR_INVALID_HANDLE;
 
-    for (unsigned int i = 0; i < name_count; ++i)
-        values[i] = resource_limit->GetCurrentResourceValue(names[i]);
+    for (unsigned int i = 0; i < name_count; ++i) {
+        u32 name = Memory::Read32(names + i * sizeof(u32));
+        s64 value = resource_limit->GetCurrentResourceValue(name);
+        Memory::Write64(values + i * sizeof(u64), value);
+    }
 
     return RESULT_SUCCESS;
 }
 
 /// Get resource limit max values
-static ResultCode GetResourceLimitLimitValues(s64* values, Kernel::Handle resource_limit_handle,
-                                              u32* names, u32 name_count) {
-    LOG_TRACE(Kernel_SVC, "called resource_limit=%08X, names=%p, name_count=%d",
+static ResultCode GetResourceLimitLimitValues(VAddr values, Kernel::Handle resource_limit_handle,
+                                              VAddr names, u32 name_count) {
+    LOG_TRACE(Kernel_SVC, "called resource_limit=%08X, names=%08X, name_count=%d",
               resource_limit_handle, names, name_count);
 
     SharedPtr<Kernel::ResourceLimit> resource_limit =
@@ -495,8 +674,11 @@ static ResultCode GetResourceLimitLimitValues(s64* values, Kernel::Handle resour
     if (resource_limit == nullptr)
         return ERR_INVALID_HANDLE;
 
-    for (unsigned int i = 0; i < name_count; ++i)
-        values[i] = resource_limit->GetMaxResourceValue(names[i]);
+    for (unsigned int i = 0; i < name_count; ++i) {
+        u32 name = Memory::Read32(names + i * sizeof(u32));
+        s64 value = resource_limit->GetMaxResourceValue(names);
+        Memory::Write64(values + i * sizeof(u64), value);
+    }
 
     return RESULT_SUCCESS;
 }
@@ -547,8 +729,9 @@ static ResultCode CreateThread(Kernel::Handle* out_handle, u32 priority, u32 ent
                   "Newly created thread must run in the SysCore (Core1), unimplemented.");
     }
 
-    CASCADE_RESULT(SharedPtr<Thread> thread, Kernel::Thread::Create(name, entry_point, priority,
-                                                                    arg, processor_id, stack_top));
+    CASCADE_RESULT(SharedPtr<Thread> thread,
+                   Kernel::Thread::Create(name, entry_point, priority, arg, processor_id, stack_top,
+                                          Kernel::g_current_process));
 
     thread->context.fpscr =
         FPSCR_DEFAULT_NAN | FPSCR_FLUSH_TO_ZERO | FPSCR_ROUND_TOZERO; // 0x03C00000
@@ -573,7 +756,7 @@ static void ExitThread() {
 }
 
 /// Gets the priority for the specified thread
-static ResultCode GetThreadPriority(s32* priority, Kernel::Handle handle) {
+static ResultCode GetThreadPriority(u32* priority, Kernel::Handle handle) {
     const SharedPtr<Kernel::Thread> thread = Kernel::g_handle_table.Get<Kernel::Thread>(handle);
     if (thread == nullptr)
         return ERR_INVALID_HANDLE;
@@ -583,7 +766,7 @@ static ResultCode GetThreadPriority(s32* priority, Kernel::Handle handle) {
 }
 
 /// Sets the priority for the specified thread
-static ResultCode SetThreadPriority(Kernel::Handle handle, s32 priority) {
+static ResultCode SetThreadPriority(Kernel::Handle handle, u32 priority) {
     if (priority > THREADPRIO_LOWEST) {
         return Kernel::ERR_OUT_OF_RANGE;
     }
@@ -868,7 +1051,7 @@ static void SleepThread(s64 nanoseconds) {
 static s64 GetSystemTick() {
     s64 result = CoreTiming::GetTicks();
     // Advance time to defeat dumb games (like Cubic Ninja) that busy-wait for the frame to end.
-    Core::CPU().AddTicks(150); // Measured time between two calls on a 9.2 o3DS with Ninjhax 1.1b
+    CoreTiming::AddTicks(150); // Measured time between two calls on a 9.2 o3DS with Ninjhax 1.1b
     return result;
 }
 
@@ -927,13 +1110,12 @@ static ResultCode CreateMemoryBlock(Kernel::Handle* out_handle, u32 addr, u32 si
 }
 
 static ResultCode CreatePort(Kernel::Handle* server_port, Kernel::Handle* client_port,
-                             const char* name, u32 max_sessions) {
+                             VAddr name_address, u32 max_sessions) {
     // TODO(Subv): Implement named ports.
-    ASSERT_MSG(name == nullptr, "Named ports are currently unimplemented");
+    ASSERT_MSG(name_address == 0, "Named ports are currently unimplemented");
 
     using Kernel::ServerPort;
     using Kernel::ClientPort;
-    using Kernel::SharedPtr;
 
     auto ports = ServerPort::CreatePortPair(max_sessions);
     CASCADE_RESULT(*client_port, Kernel::g_handle_table.Create(
@@ -944,6 +1126,41 @@ static ResultCode CreatePort(Kernel::Handle* server_port, Kernel::Handle* client
                                      std::move(std::get<SharedPtr<ServerPort>>(ports))));
 
     LOG_TRACE(Kernel_SVC, "called max_sessions=%u", max_sessions);
+    return RESULT_SUCCESS;
+}
+
+static ResultCode CreateSessionToPort(Handle* out_client_session, Handle client_port_handle) {
+    using Kernel::ClientPort;
+    SharedPtr<ClientPort> client_port = Kernel::g_handle_table.Get<ClientPort>(client_port_handle);
+    if (client_port == nullptr)
+        return ERR_INVALID_HANDLE;
+
+    CASCADE_RESULT(auto session, client_port->Connect());
+    CASCADE_RESULT(*out_client_session, Kernel::g_handle_table.Create(std::move(session)));
+    return RESULT_SUCCESS;
+}
+
+static ResultCode CreateSession(Handle* server_session, Handle* client_session) {
+    auto sessions = Kernel::ServerSession::CreateSessionPair();
+
+    auto& server = std::get<SharedPtr<Kernel::ServerSession>>(sessions);
+    CASCADE_RESULT(*server_session, Kernel::g_handle_table.Create(std::move(server)));
+
+    auto& client = std::get<SharedPtr<Kernel::ClientSession>>(sessions);
+    CASCADE_RESULT(*client_session, Kernel::g_handle_table.Create(std::move(client)));
+
+    LOG_TRACE(Kernel_SVC, "called");
+    return RESULT_SUCCESS;
+}
+
+static ResultCode AcceptSession(Handle* out_server_session, Handle server_port_handle) {
+    using Kernel::ServerPort;
+    SharedPtr<ServerPort> server_port = Kernel::g_handle_table.Get<ServerPort>(server_port_handle);
+    if (server_port == nullptr)
+        return ERR_INVALID_HANDLE;
+
+    CASCADE_RESULT(auto session, server_port->Accept());
+    CASCADE_RESULT(*out_server_session, Kernel::g_handle_table.Create(std::move(session)));
     return RESULT_SUCCESS;
 }
 
@@ -1046,7 +1263,7 @@ struct FunctionDef {
     Func* func;
     const char* name;
 };
-}
+} // namespace
 
 static const FunctionDef SVC_Table[] = {
     {0x00, nullptr, "Unknown"},
@@ -1121,14 +1338,14 @@ static const FunctionDef SVC_Table[] = {
     {0x45, nullptr, "Unknown"},
     {0x46, nullptr, "Unknown"},
     {0x47, HLE::Wrap<CreatePort>, "CreatePort"},
-    {0x48, nullptr, "CreateSessionToPort"},
-    {0x49, nullptr, "CreateSession"},
-    {0x4A, nullptr, "AcceptSession"},
+    {0x48, HLE::Wrap<CreateSessionToPort>, "CreateSessionToPort"},
+    {0x49, HLE::Wrap<CreateSession>, "CreateSession"},
+    {0x4A, HLE::Wrap<AcceptSession>, "AcceptSession"},
     {0x4B, nullptr, "ReplyAndReceive1"},
     {0x4C, nullptr, "ReplyAndReceive2"},
     {0x4D, nullptr, "ReplyAndReceive3"},
     {0x4E, nullptr, "ReplyAndReceive4"},
-    {0x4F, nullptr, "ReplyAndReceive"},
+    {0x4F, HLE::Wrap<ReplyAndReceive>, "ReplyAndReceive"},
     {0x50, nullptr, "BindInterrupt"},
     {0x51, nullptr, "UnbindInterrupt"},
     {0x52, nullptr, "InvalidateProcessDataCache"},
@@ -1190,6 +1407,9 @@ MICROPROFILE_DEFINE(Kernel_SVC, "Kernel", "SVC", MP_RGB(70, 200, 70));
 void CallSVC(u32 immediate) {
     MICROPROFILE_SCOPE(Kernel_SVC);
 
+    // Lock the global kernel mutex when we enter the kernel HLE.
+    std::lock_guard<std::recursive_mutex> lock(HLE::g_hle_lock);
+
     const FunctionDef* info = GetSVCInfo(immediate);
     if (info) {
         if (info->func) {
@@ -1200,4 +1420,4 @@ void CallSVC(u32 immediate) {
     }
 }
 
-} // namespace
+} // namespace SVC

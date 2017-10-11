@@ -57,6 +57,13 @@ void Config::ReadValues() {
             Settings::values.analogs[i] = default_param;
     }
 
+    Settings::values.motion_device =
+        qt_config->value("motion_device", "engine:motion_emu,update_period:100,sensitivity:0.01")
+            .toString()
+            .toStdString();
+    Settings::values.touch_device =
+        qt_config->value("touch_device", "engine:emu_window").toString().toStdString();
+
     qt_config->endGroup();
 
     qt_config->beginGroup("Core");
@@ -70,9 +77,9 @@ void Config::ReadValues() {
     Settings::values.use_vsync = qt_config->value("use_vsync", false).toBool();
     Settings::values.toggle_framelimit = qt_config->value("toggle_framelimit", true).toBool();
 
-    Settings::values.bg_red = qt_config->value("bg_red", 1.0).toFloat();
-    Settings::values.bg_green = qt_config->value("bg_green", 1.0).toFloat();
-    Settings::values.bg_blue = qt_config->value("bg_blue", 1.0).toFloat();
+    Settings::values.bg_red = qt_config->value("bg_red", 0.0).toFloat();
+    Settings::values.bg_green = qt_config->value("bg_green", 0.0).toFloat();
+    Settings::values.bg_blue = qt_config->value("bg_blue", 0.0).toFloat();
     qt_config->endGroup();
 
     qt_config->beginGroup("Layout");
@@ -133,7 +140,22 @@ void Config::ReadValues() {
     Settings::values.gdbstub_port = qt_config->value("gdbstub_port", 24689).toInt();
     qt_config->endGroup();
 
+    qt_config->beginGroup("WebService");
+    Settings::values.enable_telemetry = qt_config->value("enable_telemetry", true).toBool();
+    Settings::values.telemetry_endpoint_url =
+        qt_config->value("telemetry_endpoint_url", "https://services.citra-emu.org/api/telemetry")
+            .toString()
+            .toStdString();
+    Settings::values.verify_endpoint_url =
+        qt_config->value("verify_endpoint_url", "https://services.citra-emu.org/api/profile")
+            .toString()
+            .toStdString();
+    Settings::values.citra_username = qt_config->value("citra_username").toString().toStdString();
+    Settings::values.citra_token = qt_config->value("citra_token").toString().toStdString();
+    qt_config->endGroup();
+
     qt_config->beginGroup("UI");
+    UISettings::values.theme = qt_config->value("theme", UISettings::themes[0].second).toString();
 
     qt_config->beginGroup("UILayout");
     UISettings::values.geometry = qt_config->value("geometry").toByteArray();
@@ -181,6 +203,7 @@ void Config::ReadValues() {
     UISettings::values.show_status_bar = qt_config->value("showStatusBar", true).toBool();
     UISettings::values.confirm_before_closing = qt_config->value("confirmClose", true).toBool();
     UISettings::values.first_start = qt_config->value("firstStart", true).toBool();
+    UISettings::values.callout_flags = qt_config->value("calloutFlags", 0).toUInt();
 
     qt_config->endGroup();
 }
@@ -195,6 +218,8 @@ void Config::SaveValues() {
         qt_config->setValue(QString::fromStdString(Settings::NativeAnalog::mapping[i]),
                             QString::fromStdString(Settings::values.analogs[i]));
     }
+    qt_config->setValue("motion_device", QString::fromStdString(Settings::values.motion_device));
+    qt_config->setValue("touch_device", QString::fromStdString(Settings::values.touch_device));
     qt_config->endGroup();
 
     qt_config->beginGroup("Core");
@@ -268,7 +293,18 @@ void Config::SaveValues() {
     qt_config->setValue("gdbstub_port", Settings::values.gdbstub_port);
     qt_config->endGroup();
 
+    qt_config->beginGroup("WebService");
+    qt_config->setValue("enable_telemetry", Settings::values.enable_telemetry);
+    qt_config->setValue("telemetry_endpoint_url",
+                        QString::fromStdString(Settings::values.telemetry_endpoint_url));
+    qt_config->setValue("verify_endpoint_url",
+                        QString::fromStdString(Settings::values.verify_endpoint_url));
+    qt_config->setValue("citra_username", QString::fromStdString(Settings::values.citra_username));
+    qt_config->setValue("citra_token", QString::fromStdString(Settings::values.citra_token));
+    qt_config->endGroup();
+
     qt_config->beginGroup("UI");
+    qt_config->setValue("theme", UISettings::values.theme);
 
     qt_config->beginGroup("UILayout");
     qt_config->setValue("geometry", UISettings::values.geometry);
@@ -300,6 +336,7 @@ void Config::SaveValues() {
     qt_config->setValue("showStatusBar", UISettings::values.show_status_bar);
     qt_config->setValue("confirmClose", UISettings::values.confirm_before_closing);
     qt_config->setValue("firstStart", UISettings::values.first_start);
+    qt_config->setValue("calloutFlags", UISettings::values.callout_flags);
 
     qt_config->endGroup();
 }

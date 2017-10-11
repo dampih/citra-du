@@ -2,6 +2,7 @@
 cmake_minimum_required(VERSION 3.6)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
+include(DownloadExternals)
 
 project(citra)
 
@@ -11,12 +12,38 @@ option(CITRA_USE_BUNDLED_SDL2 "Download bundled SDL2 binaries" OFF)
 option(ENABLE_QT "Enable the Qt frontend" ON)
 option(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" OFF)
 
+option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
+option(CITRA_USE_BUNDLED_CURL "FOR MINGW ONLY: Download curl configured against winssl instead of openssl" OFF)
+if (ENABLE_WEB_SERVICE AND CITRA_USE_BUNDLED_CURL AND WINDOWS AND MSVC)
+    message("Turning off use bundled curl as msvc can compile curl on cpr")
+    SET(CITRA_USE_BUNDLED_CURL OFF CACHE BOOL "" FORCE)
+endif()
+if (ENABLE_WEB_SERVICE AND NOT CITRA_USE_BUNDLED_CURL AND MINGW)
+    message(AUTHOR_WARNING "Turning on CITRA_USE_BUNDLED_CURL. Override it only if you know what you are doing.")
+    SET(CITRA_USE_BUNDLED_CURL ON CACHE BOOL "" FORCE)
+endif()
+
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
     file(COPY hooks/pre-commit
         DESTINATION ${CMAKE_SOURCE_DIR}/.git/hooks)
 endif()
 
+# Sanity check : Check that all submodules are present
+# =======================================================================
+
+function(check_submodules_present)
+    file(READ "${CMAKE_SOURCE_DIR}/.gitmodules" gitmodules)
+    string(REGEX MATCHALL "path *= *[^ \t\r\n]*" gitmodules ${gitmodules})
+    foreach(module ${gitmodules})
+        string(REGEX REPLACE "path *= *" "" module ${module})
+        if (NOT EXISTS "${CMAKE_SOURCE_DIR}/${module}/.git")
+            message(SEND_ERROR "Git submodule ${module} not found."
+                    "Please run: git submodule update --init --recursive")
+        endif()
+    endforeach()
+endfunction()
+check_submodules_present()
 
 # Detect current compilation architecture and create standard definitions
 # =======================================================================
@@ -79,6 +106,8 @@ else()
     add_definitions(/D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /D_SCL_SECURE_NO_WARNINGS)
     # Avoid windows.h junk
     add_definitions(/DNOMINMAX)
+    # Avoid windows.h from including some usually unused libs like winsocks.h, since this might cause some redefinition errors.
+    add_definitions(/DWIN32_LEAN_AND_MEAN)
 
     # set up output paths for executable binaries (.exe-files, and .dll-files on DLL-capable platforms)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -92,10 +121,13 @@ else()
     # /W3 - Level 3 warnings
     # /MP - Multi-threaded compilation
     # /Zi - Output debugging information
-    # /Zo - enahnced debug info for optimized builds
-    set(CMAKE_C_FLAGS   "/W3 /MP /Zi /Zo" CACHE STRING "" FORCE)
+    # /Zo - enhanced debug info for optimized builds
+    # /permissive- - enables stricter C++ standards conformance checks
+    set(CMAKE_C_FLAGS   "/W3 /MP /Zi /Zo /permissive-" CACHE STRING "" FORCE)
     # /EHsc - C++-only exception handling semantics
-    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} /EHsc" CACHE STRING "" FORCE)
+    # /Zc:throwingNew - let codegen assume `operator new` will never return null
+    # /Zc:inline - let codegen omit inline functions in object files
+    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} /EHsc /Zc:throwingNew,inline" CACHE STRING "" FORCE)
 
     # /MDd - Multi-threaded Debug Runtime DLL
     set(CMAKE_C_FLAGS_DEBUG   "/Od /MDd" CACHE STRING "" FORCE)
@@ -107,8 +139,8 @@ else()
     set(CMAKE_C_FLAGS_RELEASE   "/O2 /GS- /MD" CACHE STRING "" FORCE)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}" CACHE STRING "" FORCE)
 
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG   "/DEBUG" CACHE STRING "" FORCE)
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG /INCREMENTAL:NO /OPT:REF,ICF" CACHE STRING "" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG   "/DEBUG /MANIFEST:NO" CACHE STRING "" FORCE)
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/DEBUG /MANIFEST:NO /INCREMENTAL:NO /OPT:REF,ICF" CACHE STRING "" FORCE)
 endif()
 
 # Set file offset size to 64 bits.
@@ -128,24 +160,6 @@ set_property(DIRECTORY APPEND PROPERTY
 
 # System imported libraries
 # ======================
-
-# This function downloads a binary library package from our external repo.
-# Params:
-#   remote_path: path to the file to download, relative to the remote repository root
-#   prefix_var: name of a variable which will be set with the path to the extracted contents
-function(download_bundled_external remote_path lib_name prefix_var)
-    set(prefix "${CMAKE_BINARY_DIR}/externals/${lib_name}")
-    if (NOT EXISTS "${prefix}")
-        message(STATUS "Downloading binaries for ${lib_name}...")
-        file(DOWNLOAD
-            https://github.com/citra-emu/ext-windows-bin/raw/master/${remote_path}${lib_name}.7z
-            "${CMAKE_BINARY_DIR}/externals/${lib_name}.7z" SHOW_PROGRESS)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf "${CMAKE_BINARY_DIR}/externals/${lib_name}.7z"
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals")
-    endif()
-    message(STATUS "Using bundled binaries at ${prefix}")
-    set(${prefix_var} "${prefix}" PARENT_SCOPE)
-endfunction()
 
 find_package(PNG QUIET)
 if (NOT PNG_FOUND)
@@ -218,6 +232,9 @@ if (ENABLE_QT)
     find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL ${QT_PREFIX_HINT})
 endif()
 
+if (ENABLE_WEB_SERVICE)
+    add_definitions(-DENABLE_WEB_SERVICE)
+endif()
 
 # Platform-specific library requirements
 # ======================================
@@ -270,15 +287,22 @@ function(create_directory_groups)
     endforeach()
 endfunction()
 
-# generate git revision information
+# Gets a UTC timstamp and sets the provided variable to it
+function(get_timestamp _var)
+    string(TIMESTAMP timestamp UTC)
+    set(${_var} "${timestamp}" PARENT_SCOPE)
+endfunction()
+
+# generate git/build information
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REF_SPEC GIT_REV)
 git_describe(GIT_DESC --always --long --dirty)
 git_branch_name(GIT_BRANCH)
+get_timestamp(BUILD_DATE)
 
+enable_testing()
 add_subdirectory(externals)
 add_subdirectory(src)
-enable_testing()
 
 
 # Installation instructions

@@ -42,6 +42,7 @@ class GMainWindow : public QMainWindow {
 
 public:
     void filterBarSetChecked(bool state);
+    void UpdateUITheme();
     GMainWindow();
     ~GMainWindow();
 
@@ -78,6 +79,8 @@ private:
     bool LoadROM(const QString& filename);
     void BootGame(const QString& filename);
     void ShutdownGame();
+
+    void ShowCallouts();
 
     /**
      * Stores the filename in the recently loaded files list.

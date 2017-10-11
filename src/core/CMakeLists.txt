@@ -26,14 +26,15 @@ set(SRCS
             file_sys/archive_systemsavedata.cpp
             file_sys/disk_archive.cpp
             file_sys/ivfc_archive.cpp
+            file_sys/ncch_container.cpp
             file_sys/path_parser.cpp
             file_sys/savedata_archive.cpp
+            file_sys/title_metadata.cpp
             frontend/camera/blank_camera.cpp
             frontend/camera/factory.cpp
             frontend/camera/interface.cpp
             frontend/emu_window.cpp
             frontend/framebuffer_layout.cpp
-            frontend/motion_emu.cpp
             gdbstub/gdbstub.cpp
             hle/config_mem.cpp
             hle/applets/applet.cpp
@@ -60,6 +61,8 @@ set(SRCS
             hle/kernel/timer.cpp
             hle/kernel/vm_manager.cpp
             hle/kernel/wait_object.cpp
+            hle/lock.cpp
+            hle/romfs.cpp
             hle/service/ac/ac.cpp
             hle/service/ac/ac_i.cpp
             hle/service/ac/ac_u.cpp
@@ -134,7 +137,8 @@ set(SRCS
             hle/service/nim/nim_aoc.cpp
             hle/service/nim/nim_s.cpp
             hle/service/nim/nim_u.cpp
-            hle/service/ns_s.cpp
+            hle/service/ns/ns.cpp
+            hle/service/ns/ns_s.cpp
             hle/service/nwm/nwm.cpp
             hle/service/nwm/nwm_cec.cpp
             hle/service/nwm/nwm_ext.cpp
@@ -144,6 +148,8 @@ set(SRCS
             hle/service/nwm/nwm_tst.cpp
             hle/service/nwm/nwm_uds.cpp
             hle/service/nwm/uds_beacon.cpp
+            hle/service/nwm/uds_connection.cpp
+            hle/service/nwm/uds_data.cpp
             hle/service/pm_app.cpp
             hle/service/ptm/ptm.cpp
             hle/service/ptm/ptm_gets.cpp
@@ -224,7 +230,6 @@ set(HEADERS
             frontend/emu_window.h
             frontend/framebuffer_layout.h
             frontend/input.h
-            frontend/motion_emu.h
             gdbstub/gdbstub.h
             hle/config_mem.h
             hle/function_wrappers.h
@@ -256,7 +261,9 @@ set(HEADERS
             hle/kernel/timer.h
             hle/kernel/vm_manager.h
             hle/kernel/wait_object.h
+            hle/lock.h
             hle/result.h
+            hle/romfs.h
             hle/service/ac/ac.h
             hle/service/ac/ac_i.h
             hle/service/ac/ac_u.h
@@ -331,7 +338,8 @@ set(HEADERS
             hle/service/nim/nim_aoc.h
             hle/service/nim/nim_s.h
             hle/service/nim/nim_u.h
-            hle/service/ns_s.h
+            hle/service/ns/ns.h
+            hle/service/ns/ns_s.h
             hle/service/nwm/nwm.h
             hle/service/nwm/nwm_cec.h
             hle/service/nwm/nwm_ext.h
@@ -341,6 +349,8 @@ set(HEADERS
             hle/service/nwm/nwm_tst.h
             hle/service/nwm/nwm_uds.h
             hle/service/nwm/uds_beacon.h
+            hle/service/nwm/uds_connection.h
+            hle/service/nwm/uds_data.h
             hle/service/pm_app.h
             hle/service/ptm/ptm.h
             hle/service/ptm/ptm_gets.h
@@ -384,5 +394,8 @@ set(HEADERS
 
 create_directory_groups(${SRCS} ${HEADERS})
 add_library(core STATIC ${SRCS} ${HEADERS})
-target_link_libraries(core PUBLIC common PRIVATE audio_core video_core)
+target_link_libraries(core PUBLIC common PRIVATE audio_core network video_core)
 target_link_libraries(core PUBLIC Boost::boost PRIVATE cryptopp dynarmic fmt)
+if (ENABLE_WEB_SERVICE)
+    target_link_libraries(core PUBLIC json-headers web_service)
+endif()

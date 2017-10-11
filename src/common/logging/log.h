@@ -90,6 +90,8 @@ enum class Class : ClassType {
     Audio_Sink,        ///< Emulator audio output backend
     Loader,            ///< ROM loader
     Input,             ///< Input emulation
+    Network,           ///< Network emulation
+    WebService,        ///< Interface to Citra Web Services
     Count              ///< Total number of logging classes
 };
 

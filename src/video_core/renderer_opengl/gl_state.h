@@ -4,7 +4,31 @@
 
 #pragma once
 
+#include <array>
 #include <glad/glad.h>
+
+namespace TextureUnits {
+
+struct TextureUnit {
+    GLint id;
+    constexpr GLenum Enum() const {
+        return static_cast<GLenum>(GL_TEXTURE0 + id);
+    }
+};
+
+constexpr TextureUnit PicaTexture(int unit) {
+    return TextureUnit{unit};
+}
+
+constexpr TextureUnit LightingLUT{3};
+constexpr TextureUnit FogLUT{4};
+constexpr TextureUnit ProcTexNoiseLUT{5};
+constexpr TextureUnit ProcTexColorMap{6};
+constexpr TextureUnit ProcTexAlphaMap{7};
+constexpr TextureUnit ProcTexLUT{8};
+constexpr TextureUnit ProcTexDiffLUT{9};
+
+} // namespace TextureUnits
 
 class OpenGLState {
 public:
@@ -64,31 +88,31 @@ public:
     } texture_units[3];
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
-    } lighting_luts[6];
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
+    } lighting_lut;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } fog_lut;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } proctex_noise_lut;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } proctex_color_map;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } proctex_alpha_map;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } proctex_lut;
 
     struct {
-        GLuint texture_1d; // GL_TEXTURE_BINDING_1D
+        GLuint texture_buffer; // GL_TEXTURE_BINDING_BUFFER
     } proctex_diff_lut;
 
     struct {
@@ -99,6 +123,8 @@ public:
         GLuint uniform_buffer;   // GL_UNIFORM_BUFFER_BINDING
         GLuint shader_program;   // GL_CURRENT_PROGRAM
     } draw;
+
+    std::array<bool, 2> clip_distance; // GL_CLIP_DISTANCE
 
     OpenGLState();
 

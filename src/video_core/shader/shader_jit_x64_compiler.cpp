@@ -75,8 +75,8 @@ const JitFunction instr_table[64] = {
     &JitShader::Compile_IF,    // ifu
     &JitShader::Compile_IF,    // ifc
     &JitShader::Compile_LOOP,  // loop
-    nullptr,                   // emit
-    nullptr,                   // sete
+    &JitShader::Compile_EMIT,  // emit
+    &JitShader::Compile_SETE,  // sete
     &JitShader::Compile_JMP,   // jmpc
     &JitShader::Compile_JMP,   // jmpu
     &JitShader::Compile_CMP,   // cmp
@@ -321,27 +321,27 @@ void JitShader::Compile_EvaluateCondition(Instruction instr) {
     case Instruction::FlowControlType::Or:
         mov(eax, COND0);
         mov(ebx, COND1);
-        xor(eax, (instr.flow_control.refx.Value() ^ 1));
-        xor(ebx, (instr.flow_control.refy.Value() ^ 1));
-        or (eax, ebx);
+        xor_(eax, (instr.flow_control.refx.Value() ^ 1));
+        xor_(ebx, (instr.flow_control.refy.Value() ^ 1));
+        or_(eax, ebx);
         break;
 
     case Instruction::FlowControlType::And:
         mov(eax, COND0);
         mov(ebx, COND1);
-        xor(eax, (instr.flow_control.refx.Value() ^ 1));
-        xor(ebx, (instr.flow_control.refy.Value() ^ 1));
-        and(eax, ebx);
+        xor_(eax, (instr.flow_control.refx.Value() ^ 1));
+        xor_(ebx, (instr.flow_control.refy.Value() ^ 1));
+        and_(eax, ebx);
         break;
 
     case Instruction::FlowControlType::JustX:
         mov(eax, COND0);
-        xor(eax, (instr.flow_control.refx.Value() ^ 1));
+        xor_(eax, (instr.flow_control.refx.Value() ^ 1));
         break;
 
     case Instruction::FlowControlType::JustY:
         mov(eax, COND1);
-        xor(eax, (instr.flow_control.refy.Value() ^ 1));
+        xor_(eax, (instr.flow_control.refy.Value() ^ 1));
         break;
     }
 }
@@ -734,10 +734,10 @@ void JitShader::Compile_LOOP(Instruction instr) {
     mov(LOOPCOUNT, dword[SETUP + offset]);
     mov(LOOPCOUNT_REG, LOOPCOUNT);
     shr(LOOPCOUNT_REG, 4);
-    and(LOOPCOUNT_REG, 0xFF0); // Y-component is the start
+    and_(LOOPCOUNT_REG, 0xFF0); // Y-component is the start
     mov(LOOPINC, LOOPCOUNT);
     shr(LOOPINC, 12);
-    and(LOOPINC, 0xFF0);                // Z-component is the incrementer
+    and_(LOOPINC, 0xFF0);               // Z-component is the incrementer
     movzx(LOOPCOUNT, LOOPCOUNT.cvt8()); // X-component is iteration count
     add(LOOPCOUNT, 1);                  // Iteration count is X-component + 1
 
@@ -770,6 +770,51 @@ void JitShader::Compile_JMP(Instruction instr) {
     } else {
         jnz(b, T_NEAR);
     }
+}
+
+static void Emit(GSEmitter* emitter, Math::Vec4<float24> (*output)[16]) {
+    emitter->Emit(*output);
+}
+
+void JitShader::Compile_EMIT(Instruction instr) {
+    Label have_emitter, end;
+    mov(rax, qword[STATE + offsetof(UnitState, emitter_ptr)]);
+    test(rax, rax);
+    jnz(have_emitter);
+
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    mov(ABI_PARAM1, reinterpret_cast<size_t>("Execute EMIT on VS"));
+    CallFarFunction(*this, LogCritical);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    jmp(end);
+
+    L(have_emitter);
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    mov(ABI_PARAM1, rax);
+    mov(ABI_PARAM2, STATE);
+    add(ABI_PARAM2, static_cast<Xbyak::uint32>(offsetof(UnitState, registers.output)));
+    CallFarFunction(*this, Emit);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    L(end);
+}
+
+void JitShader::Compile_SETE(Instruction instr) {
+    Label have_emitter, end;
+    mov(rax, qword[STATE + offsetof(UnitState, emitter_ptr)]);
+    test(rax, rax);
+    jnz(have_emitter);
+
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    mov(ABI_PARAM1, reinterpret_cast<size_t>("Execute SETEMIT on VS"));
+    CallFarFunction(*this, LogCritical);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    jmp(end);
+
+    L(have_emitter);
+    mov(byte[rax + offsetof(GSEmitter, vertex_id)], instr.setemit.vertex_id);
+    mov(byte[rax + offsetof(GSEmitter, prim_emit)], instr.setemit.prim_emit);
+    mov(byte[rax + offsetof(GSEmitter, winding)], instr.setemit.winding);
+    L(end);
 }
 
 void JitShader::Compile_Block(unsigned end) {
@@ -858,9 +903,9 @@ void JitShader::Compile(const std::array<u32, MAX_PROGRAM_CODE_LENGTH>* program_
     mov(STATE, ABI_PARAM2);
 
     // Zero address/loop  registers
-    xor(ADDROFFS_REG_0.cvt32(), ADDROFFS_REG_0.cvt32());
-    xor(ADDROFFS_REG_1.cvt32(), ADDROFFS_REG_1.cvt32());
-    xor(LOOPCOUNT_REG, LOOPCOUNT_REG);
+    xor_(ADDROFFS_REG_0.cvt32(), ADDROFFS_REG_0.cvt32());
+    xor_(ADDROFFS_REG_1.cvt32(), ADDROFFS_REG_1.cvt32());
+    xor_(LOOPCOUNT_REG, LOOPCOUNT_REG);
 
     // Used to set a register to one
     static const __m128 one = {1.f, 1.f, 1.f, 1.f};

@@ -18,7 +18,10 @@
 #endif
 
 #ifdef _WIN32
+// windows.h needs to be included before shellapi.h
 #include <windows.h>
+
+#include <shellapi.h>
 #endif
 
 #include "citra/config.h"
@@ -161,6 +164,8 @@ int main(int argc, char** argv) {
     case Core::System::ResultStatus::Success:
         break; // Expected case
     }
+
+    Core::Telemetry().AddField(Telemetry::FieldType::App, "Frontend", "SDL");
 
     while (emu_window->IsOpen()) {
         system.RunLoop();

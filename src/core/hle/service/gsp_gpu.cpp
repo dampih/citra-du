@@ -389,8 +389,8 @@ static void RegisterInterruptRelayQueue(Interface* self) {
     } else {
         cmd_buff[1] = RESULT_SUCCESS.raw;
     }
-    cmd_buff[2] = g_thread_id++;                                             // Thread ID
-    cmd_buff[4] = Kernel::g_handle_table.Create(g_shared_memory).MoveFrom(); // GSP shared memory
+    cmd_buff[2] = g_thread_id++;                                           // Thread ID
+    cmd_buff[4] = Kernel::g_handle_table.Create(g_shared_memory).Unwrap(); // GSP shared memory
 
     g_interrupt_event->Signal(); // TODO(bunnei): Is this correct?
 
@@ -475,12 +475,11 @@ static void ExecuteCommand(const Command& command, u32 thread_id) {
 
         // TODO: Consider attempting rasterizer-accelerated surface blit if that usage is ever
         // possible/likely
-        Memory::RasterizerFlushRegion(
-            Memory::VirtualToPhysicalAddress(command.dma_request.source_address),
-            command.dma_request.size);
-        Memory::RasterizerFlushAndInvalidateRegion(
-            Memory::VirtualToPhysicalAddress(command.dma_request.dest_address),
-            command.dma_request.size);
+        Memory::RasterizerFlushVirtualRegion(command.dma_request.source_address,
+                                             command.dma_request.size, Memory::FlushMode::Flush);
+        Memory::RasterizerFlushVirtualRegion(command.dma_request.dest_address,
+                                             command.dma_request.size,
+                                             Memory::FlushMode::FlushAndInvalidate);
 
         // TODO(Subv): These memory accesses should not go through the application's memory mapping.
         // They should go through the GSP module's memory mapping.

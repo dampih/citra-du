@@ -52,17 +52,15 @@ OpenGLState::OpenGLState() {
         texture_unit.sampler = 0;
     }
 
-    for (auto& lut : lighting_luts) {
-        lut.texture_1d = 0;
-    }
+    lighting_lut.texture_buffer = 0;
 
-    fog_lut.texture_1d = 0;
+    fog_lut.texture_buffer = 0;
 
-    proctex_lut.texture_1d = 0;
-    proctex_diff_lut.texture_1d = 0;
-    proctex_color_map.texture_1d = 0;
-    proctex_alpha_map.texture_1d = 0;
-    proctex_noise_lut.texture_1d = 0;
+    proctex_lut.texture_buffer = 0;
+    proctex_diff_lut.texture_buffer = 0;
+    proctex_color_map.texture_buffer = 0;
+    proctex_alpha_map.texture_buffer = 0;
+    proctex_noise_lut.texture_buffer = 0;
 
     draw.read_framebuffer = 0;
     draw.draw_framebuffer = 0;
@@ -70,6 +68,8 @@ OpenGLState::OpenGLState() {
     draw.vertex_buffer = 0;
     draw.uniform_buffer = 0;
     draw.shader_program = 0;
+
+    clip_distance = {};
 }
 
 void OpenGLState::Apply() const {
@@ -185,7 +185,7 @@ void OpenGLState::Apply() const {
     // Textures
     for (unsigned i = 0; i < ARRAY_SIZE(texture_units); ++i) {
         if (texture_units[i].texture_2d != cur_state.texture_units[i].texture_2d) {
-            glActiveTexture(GL_TEXTURE0 + i);
+            glActiveTexture(TextureUnits::PicaTexture(i).Enum());
             glBindTexture(GL_TEXTURE_2D, texture_units[i].texture_2d);
         }
         if (texture_units[i].sampler != cur_state.texture_units[i].sampler) {
@@ -194,47 +194,45 @@ void OpenGLState::Apply() const {
     }
 
     // Lighting LUTs
-    for (unsigned i = 0; i < ARRAY_SIZE(lighting_luts); ++i) {
-        if (lighting_luts[i].texture_1d != cur_state.lighting_luts[i].texture_1d) {
-            glActiveTexture(GL_TEXTURE3 + i);
-            glBindTexture(GL_TEXTURE_1D, lighting_luts[i].texture_1d);
-        }
+    if (lighting_lut.texture_buffer != cur_state.lighting_lut.texture_buffer) {
+        glActiveTexture(TextureUnits::LightingLUT.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, cur_state.lighting_lut.texture_buffer);
     }
 
     // Fog LUT
-    if (fog_lut.texture_1d != cur_state.fog_lut.texture_1d) {
-        glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_1D, fog_lut.texture_1d);
+    if (fog_lut.texture_buffer != cur_state.fog_lut.texture_buffer) {
+        glActiveTexture(TextureUnits::FogLUT.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, fog_lut.texture_buffer);
     }
 
     // ProcTex Noise LUT
-    if (proctex_noise_lut.texture_1d != cur_state.proctex_noise_lut.texture_1d) {
-        glActiveTexture(GL_TEXTURE10);
-        glBindTexture(GL_TEXTURE_1D, proctex_noise_lut.texture_1d);
+    if (proctex_noise_lut.texture_buffer != cur_state.proctex_noise_lut.texture_buffer) {
+        glActiveTexture(TextureUnits::ProcTexNoiseLUT.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, proctex_noise_lut.texture_buffer);
     }
 
     // ProcTex Color Map
-    if (proctex_color_map.texture_1d != cur_state.proctex_color_map.texture_1d) {
-        glActiveTexture(GL_TEXTURE11);
-        glBindTexture(GL_TEXTURE_1D, proctex_color_map.texture_1d);
+    if (proctex_color_map.texture_buffer != cur_state.proctex_color_map.texture_buffer) {
+        glActiveTexture(TextureUnits::ProcTexColorMap.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, proctex_color_map.texture_buffer);
     }
 
     // ProcTex Alpha Map
-    if (proctex_alpha_map.texture_1d != cur_state.proctex_alpha_map.texture_1d) {
-        glActiveTexture(GL_TEXTURE12);
-        glBindTexture(GL_TEXTURE_1D, proctex_alpha_map.texture_1d);
+    if (proctex_alpha_map.texture_buffer != cur_state.proctex_alpha_map.texture_buffer) {
+        glActiveTexture(TextureUnits::ProcTexAlphaMap.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, proctex_alpha_map.texture_buffer);
     }
 
     // ProcTex LUT
-    if (proctex_lut.texture_1d != cur_state.proctex_lut.texture_1d) {
-        glActiveTexture(GL_TEXTURE13);
-        glBindTexture(GL_TEXTURE_1D, proctex_lut.texture_1d);
+    if (proctex_lut.texture_buffer != cur_state.proctex_lut.texture_buffer) {
+        glActiveTexture(TextureUnits::ProcTexLUT.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, proctex_lut.texture_buffer);
     }
 
     // ProcTex Diff LUT
-    if (proctex_diff_lut.texture_1d != cur_state.proctex_diff_lut.texture_1d) {
-        glActiveTexture(GL_TEXTURE14);
-        glBindTexture(GL_TEXTURE_1D, proctex_diff_lut.texture_1d);
+    if (proctex_diff_lut.texture_buffer != cur_state.proctex_diff_lut.texture_buffer) {
+        glActiveTexture(TextureUnits::ProcTexDiffLUT.Enum());
+        glBindTexture(GL_TEXTURE_BUFFER, proctex_diff_lut.texture_buffer);
     }
 
     // Framebuffer
@@ -265,6 +263,17 @@ void OpenGLState::Apply() const {
         glUseProgram(draw.shader_program);
     }
 
+    // Clip distance
+    for (size_t i = 0; i < clip_distance.size(); ++i) {
+        if (clip_distance[i] != cur_state.clip_distance[i]) {
+            if (clip_distance[i]) {
+                glEnable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
+            } else {
+                glDisable(GL_CLIP_DISTANCE0 + static_cast<GLenum>(i));
+            }
+        }
+    }
+
     cur_state = *this;
 }
 
@@ -274,6 +283,20 @@ void OpenGLState::ResetTexture(GLuint handle) {
             unit.texture_2d = 0;
         }
     }
+    if (cur_state.lighting_lut.texture_buffer == handle)
+        cur_state.lighting_lut.texture_buffer = 0;
+    if (cur_state.fog_lut.texture_buffer == handle)
+        cur_state.fog_lut.texture_buffer = 0;
+    if (cur_state.proctex_noise_lut.texture_buffer == handle)
+        cur_state.proctex_noise_lut.texture_buffer = 0;
+    if (cur_state.proctex_color_map.texture_buffer == handle)
+        cur_state.proctex_color_map.texture_buffer = 0;
+    if (cur_state.proctex_alpha_map.texture_buffer == handle)
+        cur_state.proctex_alpha_map.texture_buffer = 0;
+    if (cur_state.proctex_lut.texture_buffer == handle)
+        cur_state.proctex_lut.texture_buffer = 0;
+    if (cur_state.proctex_diff_lut.texture_buffer == handle)
+        cur_state.proctex_diff_lut.texture_buffer = 0;
 }
 
 void OpenGLState::ResetSampler(GLuint handle) {

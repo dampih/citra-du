@@ -275,7 +275,7 @@ static void GetTransferEndEvent(Interface* self) {
 
     cmd_buff[0] = IPC::MakeHeader(0xF, 2, 0);
     cmd_buff[1] = RESULT_SUCCESS.raw;
-    cmd_buff[3] = Kernel::g_handle_table.Create(completion_event).MoveFrom();
+    cmd_buff[3] = Kernel::g_handle_table.Create(completion_event).Unwrap();
 
     LOG_DEBUG(Service_Y2R, "called");
 }
@@ -587,8 +587,8 @@ static void StartConversion(Interface* self) {
     // dst_image_size would seem to be perfect for this, but it doesn't include the gap :(
     u32 total_output_size =
         conversion.input_lines * (conversion.dst.transfer_unit + conversion.dst.gap);
-    Memory::RasterizerFlushAndInvalidateRegion(
-        Memory::VirtualToPhysicalAddress(conversion.dst.address), total_output_size);
+    Memory::RasterizerFlushVirtualRegion(conversion.dst.address, total_output_size,
+                                         Memory::FlushMode::FlushAndInvalidate);
 
     HW::Y2R::PerformConversion(conversion);
 
