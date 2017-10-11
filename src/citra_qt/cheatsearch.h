@@ -31,13 +31,9 @@ private:
 
     template <typename T, typename T2>
     std::shared_ptr<std::vector<FoundItems>> FirstSearch(const T value, std::function<bool(int, int, int)> comparer);
-    std::shared_ptr<std::vector<FoundItems>> FirstSearch(const float value, std::function<bool(int, int, int)> comparer);
-    std::shared_ptr<std::vector<FoundItems>> FirstSearch(const double value, std::function<bool(int, int, int)> comparer);
 
     template <typename T, typename T2>
     std::shared_ptr<std::vector<FoundItems>> NextSearch(const T value, std::function<bool(int, int, int)> comparer, const std::shared_ptr<std::vector<FoundItems>> previous_found);
-    std::shared_ptr<std::vector<FoundItems>> NextSearch(const float value, std::function<bool(int, int, int)> comparer, const std::shared_ptr<std::vector<FoundItems>> previous_found);
-    std::shared_ptr<std::vector<FoundItems>> NextSearch(const double value, std::function<bool(int, int, int)> comparer, const std::shared_ptr<std::vector<FoundItems>> previous_found);
 
     bool Equals(int a, int b, int c);
 

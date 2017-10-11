@@ -25,6 +25,8 @@ class MicroProfileDialog;
 class ProfilerWidget;
 class RegistersWidget;
 class WaitTreeWidget;
+class CheatDialog;
+class CheatSearch;
 
 class GMainWindow : public QMainWindow {
     Q_OBJECT
