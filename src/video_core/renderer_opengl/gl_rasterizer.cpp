@@ -234,13 +234,13 @@ void RasterizerOpenGL::DrawTriangles() {
                                 state.color_mask.blue_enabled == GL_TRUE ||
                                 state.color_mask.alpha_enabled == GL_TRUE;
 
-    const bool write_depth_fb = state.depth.write_mask == GL_TRUE ||
-                                (has_stencil && state.stencil.write_mask != 0);
+    const bool write_depth_fb = (state.depth.test_enabled && state.depth.write_mask == GL_TRUE) ||
+        (has_stencil && state.stencil.test_enabled && state.stencil.write_mask != 0);
 
     const bool using_color_fb = regs.framebuffer.framebuffer.GetColorBufferPhysicalAddress() != 0 &&
                                 write_color_fb;
     const bool using_depth_fb = regs.framebuffer.framebuffer.GetDepthBufferPhysicalAddress() != 0 &&
-        (write_depth_fb || state.depth.test_enabled || (has_stencil && state.stencil.test_enabled));
+        (write_depth_fb || regs.framebuffer.output_merger.depth_test_enable != 0 || (has_stencil && state.stencil.test_enabled));
 
     MathUtil::Rectangle<s32> viewport_rect_unscaled{
         // These registers hold half-width and half-height, so must be multiplied by 2
@@ -264,9 +264,9 @@ void RasterizerOpenGL::DrawTriangles() {
     MathUtil::Rectangle<u32> draw_rect{
         MathUtil::Clamp(surfaces_rect.left + viewport_rect_unscaled.left * res_scale, // left
                         surfaces_rect.left, surfaces_rect.right),
-        MathUtil::Clamp(surfaces_rect.bottom + viewport_rect_unscaled.GetHeight() * res_scale, // top
+        MathUtil::Clamp(surfaces_rect.bottom + viewport_rect_unscaled.top * res_scale, // top
                         surfaces_rect.bottom, surfaces_rect.top),
-        MathUtil::Clamp(surfaces_rect.left + viewport_rect_unscaled.GetWidth() * res_scale, // right
+        MathUtil::Clamp(surfaces_rect.left + viewport_rect_unscaled.right * res_scale, // right
                         surfaces_rect.left, surfaces_rect.right),
         MathUtil::Clamp(surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale, // bottom
                         surfaces_rect.bottom, surfaces_rect.top)
@@ -1001,16 +1001,22 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
 }
 
 bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config) {
-    const u32 input_width = config.texture_copy.input_width * 16;
-    const u32 input_gap = config.texture_copy.input_gap * 16;
-    const u32 output_width = config.texture_copy.output_width * 16;
-    const u32 output_gap = config.texture_copy.output_gap * 16;
+    u32 input_width = config.texture_copy.input_width * 16;
+    u32 input_gap = config.texture_copy.input_gap * 16;
+    u32 output_width = config.texture_copy.output_width * 16;
+    u32 output_gap = config.texture_copy.output_gap * 16;
 
     if (config.texture_copy.size == 0)
         return true;
 
-    if (input_width != output_width || config.texture_copy.size % input_width != 0)
+    if (config.texture_copy.size < input_width && config.texture_copy.size < output_width) {
+        input_width = output_width = config.texture_copy.size;
+        input_gap = output_gap = 0;
+    }
+
+    if (input_width != output_width || config.texture_copy.size % input_width != 0) {
         return false;
+    }
 
     SurfaceParams src_params;
     src_params.addr = config.GetPhysicalInputAddress();

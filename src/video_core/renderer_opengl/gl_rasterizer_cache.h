@@ -113,6 +113,9 @@ struct SurfaceParams {
         ASSERT(static_cast<size_t>(format) < bpp_table.size());
         return bpp_table[static_cast<size_t>(format)];
     }
+    unsigned int GetFormatBpp() const {
+        return GetFormatBpp(pixel_format);
+    }
 
     static PixelFormat PixelFormatFromTextureFormat(Pica::TexturingRegs::TextureFormat format) {
         return ((unsigned int)format < 14) ? (PixelFormat)format : PixelFormat::Invalid;
@@ -181,22 +184,25 @@ struct SurfaceParams {
 
     /// Update the params "size", "end" and "type" from the already set "addr", "width", "height" and "pixel_format"
     void UpdateParams() {
-        size = width * height * GetFormatBpp(pixel_format) / 8;
-
-        if (stride == 0)
+        if (stride == 0) {
             stride = width;
-        else
-            size += (stride - width) * (height - 1) * GetFormatBpp(pixel_format) / 8;
-
-        end = addr + size;
+        }
         type = GetFormatType(pixel_format);
+        size = !is_tiled ? BytesInPixels(stride * (height - 1) + width) :
+                           BytesInPixels(stride*8 * (height/8 - 1) + width*8);
+        end = addr + size;
     }
 
     SurfaceInterval GetInterval() const {
         return SurfaceInterval::right_open(addr, end);
     }
 
+    SurfaceParams FromInterval(SurfaceInterval interval) const;
+
     SurfaceInterval GetSubRectInterval(MathUtil::Rectangle<u32> unscaled_rect) const;
+
+    // Returns the region of the biggest valid rectange within interval
+    SurfaceInterval GetCopyableInterval(const Surface& src_surface) const;
 
     u32 GetScaledWidth() const {
         return width * res_scale;
@@ -222,10 +228,6 @@ struct SurfaceParams {
         return pixels * GetFormatBpp(pixel_format) / 8;
     }
 
-    u32 BytesPerPixel() const {
-        return BytesInPixels(1);
-    }
-
     bool ExactMatch(const SurfaceParams& other_surface) const;
     bool CanSubRect(const SurfaceParams& sub_surface) const;
     bool CanExpand(const SurfaceParams& expanded_surface) const;
@@ -249,17 +251,15 @@ struct SurfaceParams {
 };
 
 struct CachedSurface : SurfaceParams {
-    bool CanCopy(const SurfaceParams& dest_surface) const;
+    bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
+    bool CanCopy(const SurfaceParams& dest_surface, SurfaceInterval copy_interval) const;
 
-    bool IsRegionValid(const SurfaceInterval& interval) const {
+    bool IsRegionValid(SurfaceInterval interval) const {
         return (invalid_regions.find(interval) == invalid_regions.end());
     }
 
-    bool IsRegionPartiallyValid(const SurfaceInterval& interval) const {
-        const auto it = invalid_regions.find(interval);
-        if (it == invalid_regions.end())
-            return true;
-        return ((boost::icl::first(*it) > addr) || (boost::icl::last_next(*it) < end));
+    bool IsSurfaceFullyInvalid() const {
+        return (invalid_regions & GetInterval()) == SurfaceRegions(GetInterval());
     }
 
     SurfaceRegions invalid_regions;
@@ -292,6 +292,9 @@ public:
     bool BlitSurfaces(const Surface& src_surface, const MathUtil::Rectangle<u32>& src_rect,
                       const Surface& dst_surface, const MathUtil::Rectangle<u32>& dst_rect);
 
+    /// Copy one surface's region to another
+    void CopySurface(const Surface& src_surface, const Surface& dst_surface, SurfaceInterval copy_interval);
+
     /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
     Surface GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale, bool load_if_create);
 
@@ -323,6 +326,8 @@ public:
     void FlushAll();
 
 private:
+    void DuplicateSurface(const Surface& src_surface, const Surface& dest_surface);
+
     /// Update surface's texture for given region when necessary
     void ValidateSurface(const Surface& surface, PAddr addr, u32 size);
 
@@ -341,4 +346,5 @@ private:
     SurfaceCache surface_cache;
     SurfaceMap dirty_regions;
     PageMap cached_pages;
+    SurfaceSet remove_surfaces;
 };
