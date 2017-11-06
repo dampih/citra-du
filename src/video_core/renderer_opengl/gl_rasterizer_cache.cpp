@@ -137,25 +137,26 @@ static void MortonCopyPixels(u32 width, u32 height, const u8* in_data, u8* out_d
 }
 
 template <size_t size>
-class FunctionTable {
+struct FunctionTable {
 public:
-    FunctionTable() {
-        FillArray<size>();
-    }
-    const auto& operator [](size_t pos) const {
+    constexpr FunctionTable() : table{ GetArray(std::integral_constant<size_t, size>{}) } {};
+    constexpr auto& operator [](size_t pos) const {
         return table[pos];
     }
 private:
-    template <size_t P>
-    void FillArray() {
-        table[P - 1] = &MortonCopyPixels<P - 1>;
-        FillArray<P - 1>();
+    using FnType = decltype(&MortonCopyPixels<0>);
+    template <size_t pos, typename... Args>
+    constexpr auto GetArray(std::integral_constant<size_t, pos>, Args&&... args) const {
+        return GetArray(std::integral_constant<size_t, pos - 1>{}, &MortonCopyPixels<pos - 1>, std::forward<Args>(args)...);
     }
-    template <>
-    void FillArray<0>() {}
-    std::array<decltype(&MortonCopyPixels<0>), size> table;
+    template <typename... Args>
+    constexpr auto GetArray(std::integral_constant<size_t, 0>, Args&&... args) const {
+        return std::array<FnType, size>{ std::forward<Args>(args)... };
+    }
+    std::array<FnType, size> table;
 };
-static const FunctionTable<MortonCopyFlags::MaxValue + 1> MortonCopyFnTable;
+
+static constexpr FunctionTable<MortonCopyFlags::MaxValue + 1> MortonCopyFnTable;
 
 // Allocate an uninitialized texture of appropriate size and format for the surface
 static void AllocateSurfaceTexture(GLuint texture, const FormatTuple& format_tuple, u32 width, u32 height) {
@@ -977,7 +978,7 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::TexturingRegs::Full
     return GetSurface(params, ScaleMatch::Ignore, true);
 }
 
-constexpr u16 GetResolutionScaleFactor() {
+static u16 GetResolutionScaleFactor() {
     return !Settings::values.resolution_factor ?
         VideoCore::g_emu_window->GetFramebufferLayout().GetScalingRatio() :
         Settings::values.resolution_factor;
