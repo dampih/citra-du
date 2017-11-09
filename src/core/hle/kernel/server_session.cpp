@@ -76,8 +76,10 @@ ResultCode ServerSession::HandleSyncRequest(SharedPtr<Thread> thread) {
             // starvation when a thread only does sync requests to HLE services while a
             // lower-priority thread is waiting to run.
 
-            // TODO(Subv): Figure out a good value for this.
-            static constexpr u64 IPCDelayNanoseconds = 100;
+            // This delay was approximated in a homebrew application by measuring the time it takes
+            // for a svcSendSyncRequest to return when performing an IPC request to a custom dummy
+            // service in an o3DS with firmware 11.6.
+            static constexpr u64 IPCDelayNanoseconds = 51140;
             thread->WakeAfterDelay(IPCDelayNanoseconds);
         } else {
             // Add the thread to the list of threads that have issued a sync request with this
