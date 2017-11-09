@@ -435,8 +435,10 @@ bool SurfaceParams::CanExpand(const SurfaceParams& expanded_surface) const {
     const u32 byte_offset = std::max(expanded_surface.addr, addr) -
                                 std::min(expanded_surface.addr, addr);
 
-    return byte_offset % BytesInPixels(stride) == 0 &&
-           (!is_tiled || (byte_offset / BytesInPixels(stride)) % 8 == 0);
+    const int x0 = byte_offset % BytesInPixels(stride);
+    const int y0 = byte_offset / BytesInPixels(stride);
+
+    return x0 == 0 && (!is_tiled || y0 % 8 == 0);
 }
 
 bool SurfaceParams::CanTexCopy(const SurfaceParams& texcopy_params) const {
@@ -1045,7 +1047,7 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
         // Can't specify separate color and depth viewport offsets in OpenGL
         if (color_rect.bottom < depth_rect.bottom) {
             color_params.addr -= color_params.BytesInPixels(depth_params.PixelsInBytes(depth_params.addr - depth_surface->addr));
-            color_params.height = depth_surface->height;
+            color_params.height = color_surface->height + (depth_rect.bottom - color_rect.bottom) / resolution_scale_factor;
             color_params.UpdateParams();
 
             Surface new_surface = GetSurface(color_params, ScaleMatch::Exact, false);
@@ -1056,7 +1058,7 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
         }
         else if (depth_rect.bottom < color_rect.bottom) {
             depth_params.addr -= depth_params.BytesInPixels(color_params.PixelsInBytes(color_params.addr - color_surface->addr));
-            depth_params.height = color_surface->height;
+            depth_params.height = depth_surface->height + (color_rect.bottom - depth_rect.bottom) / resolution_scale_factor;
             depth_params.UpdateParams();
 
             Surface new_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
@@ -1306,13 +1308,15 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
 
     for (auto& remove_surface : remove_surfaces) {
         if (remove_surface == region_owner) {
-            // The surface that we previously expanded has been modified
-            // so we have to refresh the expanded one before erasing this one
             Surface expanded_surface =
-                FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(surface_cache, *region_owner, ScaleMatch::Upscale);
+                FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(surface_cache, *region_owner, ScaleMatch::Ignore);
             ASSERT(expanded_surface);
 
-            DuplicateSurface(region_owner, expanded_surface);
+            if ((region_owner->invalid_regions - expanded_surface->invalid_regions).empty()) {
+                DuplicateSurface(region_owner, expanded_surface);
+            } else {
+                continue;
+            }
         }
         UnregisterSurface(remove_surface);
     }
