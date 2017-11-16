@@ -273,6 +273,7 @@ void Shutdown() {
     BOSS::Shutdown();
     APT::Shutdown();
     AM::Shutdown();
+    ACT::Shutdown();
     FS::ArchiveShutdown();
 
     SM::g_service_manager = nullptr;
