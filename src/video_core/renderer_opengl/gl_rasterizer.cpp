@@ -297,11 +297,10 @@ void RasterizerOpenGL::DrawTriangles() {
     }
 
     // Sync the viewport
-    glViewport(
-        static_cast<GLint>(surfaces_rect.left + viewport_rect_unscaled.left * res_scale),
-        static_cast<GLint>(surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale),
-        static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale),
-        static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale));
+    state.viewport.x = static_cast<GLint>(surfaces_rect.left + viewport_rect_unscaled.left * res_scale);
+    state.viewport.y = static_cast<GLint>(surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale);
+    state.viewport.width = static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale);
+    state.viewport.height = static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale);
 
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
@@ -1009,9 +1008,14 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     if (config.texture_copy.size == 0)
         return true;
 
-    if (config.texture_copy.size < input_width && config.texture_copy.size < output_width) {
-        input_width = output_width = config.texture_copy.size;
-        input_gap = output_gap = 0;
+    if (input_width >= config.texture_copy.size) {
+        input_width = config.texture_copy.size;
+        input_gap = 0;
+    }
+
+    if (output_width >= config.texture_copy.size) {
+        output_width = config.texture_copy.size;
+        output_gap = 0;
     }
 
     if (input_width != output_width || config.texture_copy.size % input_width != 0) {
