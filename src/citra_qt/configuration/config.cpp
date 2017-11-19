@@ -133,6 +133,7 @@ void Config::ReadValues() {
 
     qt_config->beginGroup("Miscellaneous");
     Settings::values.log_filter = qt_config->value("log_filter", "*:Info").toString().toStdString();
+    Settings::values.sr_delay = qt_config->value("sr_delay", true).toBool();
     qt_config->endGroup();
 
     qt_config->beginGroup("Debugging");
@@ -293,6 +294,7 @@ void Config::SaveValues() {
 
     qt_config->beginGroup("Miscellaneous");
     qt_config->setValue("log_filter", QString::fromStdString(Settings::values.log_filter));
+    qt_config->setValue("sr_delay", Settings::values.sr_delay);
     qt_config->endGroup();
 
     qt_config->beginGroup("Debugging");

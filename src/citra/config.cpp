@@ -151,6 +151,7 @@ void Config::ReadValues() {
 
     // Miscellaneous
     Settings::values.log_filter = sdl2_config->Get("Miscellaneous", "log_filter", "*:Info");
+    Settings::values.sr_delay = sdl2_config->GetBoolean("Miscellaneous", "sr_delay", true);
 
     // Debugging
     Settings::values.use_gdbstub = sdl2_config->GetBoolean("Debugging", "use_gdbstub", false);
