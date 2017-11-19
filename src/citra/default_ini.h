@@ -173,6 +173,8 @@ camera_inner_config =
 # A filter which removes logs below a certain logging level.
 # Examples: *:Debug Kernel.SVC:Trace Service.*:Critical
 log_filter = *:Info
+# Sync Request Delay
+sr_delay =
 
 [Debugging]
 # Port for listening to GDB connections.

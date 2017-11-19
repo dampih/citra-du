@@ -4,6 +4,7 @@
 
 #include <tuple>
 
+#include "core/settings.h"
 #include "core/hle/kernel/client_port.h"
 #include "core/hle/kernel/client_session.h"
 #include "core/hle/kernel/hle_ipc.h"
@@ -67,9 +68,18 @@ ResultCode ServerSession::HandleSyncRequest(SharedPtr<Thread> thread) {
     // If this ServerSession has an associated HLE handler, forward the request to it.
     if (hle_handler != nullptr) {
         hle_handler->HandleSyncRequest(SharedPtr<ServerSession>(this));
-    }
+    } else {
+             if (!Settings::values.sr_delay) {
+                  // Put the thread to sleep until the server replies, it will be awoken in
+                  // svcReplyAndReceive.
+                  thread->status = THREADSTATUS_WAIT_IPC;
+                 }
+              // Add the thread to the list of threads that have issued a sync request with this
+              // server.
+              pending_requesting_threads.push_back(std::move(thread));
+           }
 
-    if (thread->status == THREADSTATUS_RUNNING) {
+    if (thread->status == THREADSTATUS_RUNNING  && Settings::values.sr_delay) {
         // Put the thread to sleep until the server replies, it will be awoken in
         // svcReplyAndReceive for LLE servers.
         thread->status = THREADSTATUS_WAIT_IPC;
