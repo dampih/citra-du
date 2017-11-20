@@ -38,6 +38,13 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="sr_delay">
+            <property name="text">
+             <string>Enable Sync Request Delay</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
        </layout>
