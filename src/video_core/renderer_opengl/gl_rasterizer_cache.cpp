@@ -90,7 +90,7 @@ void main() {
 )";
 
 struct {
-    static constexpr char convert_fs[] = R"(
+    const std::string convert_fs = R"(
 #version 330 core
 
 uniform samplerBuffer tbo;
@@ -900,7 +900,7 @@ Surface FindMatch(const SurfaceCache& surface_cache,
             const bool res_scale_matched = match_scale_type == ScaleMatch::Exact ?
                 (params.res_scale == surface->res_scale) :
                 (params.res_scale <= surface->res_scale);
-            const bool is_valid = find_flags & MatchFlags::Copy ? true : // validity will be checked in GetCopyableInterval
+            bool is_valid = find_flags & MatchFlags::Copy ? true : // validity will be checked in GetCopyableInterval
                 surface->IsRegionValid(validate_interval.value_or(params.GetInterval()));
 
             if (!(find_flags & MatchFlags::Invalid) && !is_valid)
@@ -976,7 +976,7 @@ RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
 
     attributeless_vao.Create();
 
-    d24s8_abgr_converter.shader.Create(fullscreenquad_vs, d24s8_abgr_converter.convert_fs);
+    d24s8_abgr_converter.shader.Create(fullscreenquad_vs, d24s8_abgr_converter.convert_fs.c_str());
     d24s8_abgr_converter.u_tbo = glGetUniformLocation(d24s8_abgr_converter.shader.handle, "tbo");
     d24s8_abgr_converter.u_tbo_size = glGetUniformLocation(d24s8_abgr_converter.shader.handle, "tbo_size");
     d24s8_abgr_converter.u_vp_offset = glGetUniformLocation(d24s8_abgr_converter.shader.handle, "vp_offset");
@@ -1194,41 +1194,54 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
     if (using_depth_fb)
         std::tie(depth_surface, depth_rect) = GetSurfaceSubRect(depth_params, ScaleMatch::Exact, false);
 
+    // Color and Depth surfaces must have the same dimensions and offsets
     if (color_surface != nullptr && depth_surface != nullptr) {
-        // Can't specify separate color and depth viewport offsets in OpenGL
-        if (color_rect.bottom < depth_rect.bottom) {
-            color_params.addr -= color_params.BytesInPixels(depth_params.PixelsInBytes(depth_params.addr - depth_surface->addr));
-            color_params.height = color_surface->height + (depth_rect.bottom - color_rect.bottom) / resolution_scale_factor;
-            color_params.UpdateParams();
+        if (color_rect.bottom != depth_rect.bottom || color_surface->height != depth_surface->height) {
+            u32 addr_pixel_offset = std::max(color_params.PixelsInBytes(color_params.addr - color_surface->addr),
+                                             depth_params.PixelsInBytes(depth_params.addr - depth_surface->addr));
 
-            Surface new_surface = GetSurface(color_params, ScaleMatch::Exact, false);
-            DuplicateSurface(color_surface, new_surface);
-            remove_surfaces.emplace(color_surface);
-            color_surface = new_surface;
-            color_rect = depth_rect;
-        }
-        else if (depth_rect.bottom < color_rect.bottom) {
-            depth_params.addr -= depth_params.BytesInPixels(color_params.PixelsInBytes(color_params.addr - color_surface->addr));
-            depth_params.height = depth_surface->height + (color_rect.bottom - depth_rect.bottom) / resolution_scale_factor;
-            depth_params.UpdateParams();
+            color_params.addr -= color_params.BytesInPixels(addr_pixel_offset);
+            depth_params.addr -= depth_params.BytesInPixels(addr_pixel_offset);
 
-            Surface new_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
-            DuplicateSurface(depth_surface, new_surface);
-            remove_surfaces.emplace(depth_surface);
-            depth_surface = new_surface;
-            depth_rect = color_rect;
+            u32 end_pixel_offset = std::max(color_params.PixelsInBytes(color_surface->end - color_params.end),
+                                            depth_params.PixelsInBytes(depth_surface->end - depth_params.end));
+
+            color_params.end += color_params.BytesInPixels(end_pixel_offset);
+            depth_params.end += depth_params.BytesInPixels(end_pixel_offset);
+
+            if (color_rect.bottom < depth_rect.bottom) {
+                color_rect = depth_rect;
+            } else {
+                depth_rect = color_rect;
+            }
+
+            color_params.height = (color_params.end - color_params.addr) / color_params.BytesInPixels(color_params.stride);
+            depth_params.height = (depth_params.end - depth_params.addr) / depth_params.BytesInPixels(depth_params.stride);
+
+            if (color_params.addr != color_surface->addr || color_params.end != color_surface->end) {
+                Surface new_surface = GetSurface(color_params, ScaleMatch::Exact, false);
+                DuplicateSurface(color_surface, new_surface);
+                remove_surfaces.emplace(color_surface);
+                color_surface = new_surface;
+            }
+            if (depth_params.addr != depth_surface->addr || depth_params.end != depth_surface->end) {
+                Surface new_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
+                DuplicateSurface(depth_surface, new_surface);
+                remove_surfaces.emplace(depth_surface);
+                depth_surface = new_surface;
+            }
         }
     }
 
     MathUtil::Rectangle<u32> rect{};
     if (color_surface != nullptr) {
-        ASSERT(!color_rect.left);
         rect = color_rect;
+        ASSERT(!rect.left && rect.right == config.GetWidth() * resolution_scale_factor);
         ValidateSurface(color_surface, boost::icl::first(color_vp_interval), boost::icl::length(color_vp_interval));
     }
     if (depth_surface != nullptr) {
-        ASSERT(!depth_rect.left);
         rect = depth_rect;
+        ASSERT(!rect.left && rect.right == config.GetWidth() * resolution_scale_factor);
         ValidateSurface(depth_surface, boost::icl::first(depth_vp_interval), boost::icl::length(depth_vp_interval));
     }
 
@@ -1359,9 +1372,9 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
 
         // HACK HACK HACK: Ignore format reinterpretation
         // this is a placeholder for HW texture decoding/encoding
-        constexpr bool ENABLE_IGNORE_FORMAT_REINTERPRETING = true;
+        constexpr bool IGNORE_FORMAT_REINTERPRETING = true;
         bool retry = false;
-        if (ENABLE_IGNORE_FORMAT_REINTERPRETING) {
+        if (IGNORE_FORMAT_REINTERPRETING) {
             for (const auto& pair : RangeFromInterval(dirty_regions, interval)) {
                 validate_regions.erase(pair.first & interval);
                 retry = true;
