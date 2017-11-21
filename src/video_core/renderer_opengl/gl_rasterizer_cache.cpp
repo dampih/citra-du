@@ -776,7 +776,7 @@ Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params
             const bool res_scale_matched = match_scale_type == ScaleMatch::Exact ?
                 (params.res_scale == surface->res_scale) :
                 (params.res_scale <= surface->res_scale);
-            const bool is_valid = find_flags & MatchFlags::Copy ? true : // validity will be checked in GetCopyableInterval
+            bool is_valid = find_flags & MatchFlags::Copy ? true : // validity will be checked in GetCopyableInterval
                 surface->IsRegionValid(params.GetInterval());
 
             if (!(find_flags & MatchFlags::Invalid) && !is_valid)
@@ -1073,11 +1073,13 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
     if (color_surface != nullptr) {
         ASSERT(!color_rect.left);
         rect = color_rect;
+        ASSERT(!rect.left && rect.right == config.GetWidth() * resolution_scale_factor);
         ValidateSurface(color_surface, boost::icl::first(color_vp_interval), boost::icl::length(color_vp_interval));
     }
     if (depth_surface != nullptr) {
         ASSERT(!depth_rect.left);
         rect = depth_rect;
+        ASSERT(!rect.left && rect.right == config.GetWidth() * resolution_scale_factor);
         ValidateSurface(depth_surface, boost::icl::first(depth_vp_interval), boost::icl::length(depth_vp_interval));
     }
 
