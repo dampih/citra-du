@@ -116,6 +116,7 @@ struct Values {
     float bg_blue;
 
     std::string log_filter;
+    bool sr_delay;
 
     // Audio
     std::string sink_id;
