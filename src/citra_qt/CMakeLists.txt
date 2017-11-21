@@ -6,6 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 set(SRCS
             configuration/config.cpp
             configuration/configure_audio.cpp
+            configuration/configure_camera.cpp
             configuration/configure_debug.cpp
             configuration/configure_dialog.cpp
             configuration/configure_general.cpp
@@ -37,6 +38,7 @@ set(SRCS
             bootmanager.cpp
             cheatsearch.cpp
             cheat_gui.cpp
+            droparea.cpp
             game_list.cpp
             hotkeys.cpp
             main.cpp
@@ -48,6 +50,7 @@ set(SRCS
 set(HEADERS
             configuration/config.h
             configuration/configure_audio.h
+            configuration/configure_camera.h
             configuration/configure_debug.h
             configuration/configure_dialog.h
             configuration/configure_general.h
@@ -81,8 +84,9 @@ set(HEADERS
             util/util.h
             aboutdialog.h
             bootmanager.h
-			cheatsearch.h
-			cheat_gui.h
+            cheatsearch.h
+            cheat_gui.h
+            droparea.h
             game_list.h
             game_list_p.h
             hotkeys.h
@@ -93,6 +97,7 @@ set(HEADERS
 set(UIS
             configuration/configure.ui
             configuration/configure_audio.ui
+            configuration/configure_camera.ui
             configuration/configure_debug.ui
             configuration/configure_general.ui
             configuration/configure_graphics.ui
