@@ -35,6 +35,8 @@ set(SRCS
             util/util.cpp
             aboutdialog.cpp
             bootmanager.cpp
+            cheatsearch.cpp
+            cheat_gui.cpp
             game_list.cpp
             hotkeys.cpp
             main.cpp
@@ -79,6 +81,8 @@ set(HEADERS
             util/util.h
             aboutdialog.h
             bootmanager.h
+			cheatsearch.h
+			cheat_gui.h
             game_list.h
             game_list_p.h
             hotkeys.h
@@ -97,6 +101,8 @@ set(UIS
             configuration/configure_web.ui
             debugger/registers.ui
             aboutdialog.ui
+            cheatsearch.ui
+            cheat_gui.ui
             hotkeys.ui
             main.ui
             multiplayer/direct_connect.ui
