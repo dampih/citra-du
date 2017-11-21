@@ -143,16 +143,6 @@ after_build:
           7z a $MINGW_SEVENZIP $RELEASE_DIST
         }
 
-test_script:
-  - cd %BUILD_TYPE%_build
-  - ps: |
-        if ($env:BUILD_TYPE -eq 'msvc') {
-          ctest -VV -C Release
-        } else {
-          C:\msys64\usr\bin\bash.exe -lc "ctest -VV -C Release"
-        }
-  - cd ..
-
 artifacts:
   - path: $(BUILD_ZIP)
     name: build
