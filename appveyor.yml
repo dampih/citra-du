@@ -68,7 +68,7 @@ after_build:
           $RELEASE_DIST, $RELEASE_VERSION = $env:APPVEYOR_REPO_TAG_NAME.split('-')
         } else {
           # There is no repo tag - make assumptions
-          $RELEASE_DIST = "head"
+          $RELEASE_DIST = "jeruk-mantap"
         }
 
         if ($env:BUILD_TYPE -eq 'msvc') {
@@ -156,7 +156,7 @@ deploy:
   provider: GitHub
   release: $(appveyor_repo_tag_name)
   auth_token:
-    secure: "o6tQ+zZGooN39O+R1kq9D9yZXlXi8Nao89G5OE++kbEbZyOStGI//SGLCabP7Txb"
+    secure: "KaNEawGRFZekZGy9BKmkQqpe1mpnxnkhH0rUQikDzKSvUE0eVOKB0DnEWPrW9p3A"
   artifact: update,build
   draft: false
   prerelease: false
