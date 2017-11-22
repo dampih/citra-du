@@ -68,7 +68,7 @@ after_build:
           $RELEASE_DIST, $RELEASE_VERSION = $env:APPVEYOR_REPO_TAG_NAME.split('-')
         } else {
           # There is no repo tag - make assumptions
-          $RELEASE_DIST = "head"
+          $RELEASE_DIST = "jeruk-mantap"
         }
 
         if ($env:BUILD_TYPE -eq 'msvc') {
