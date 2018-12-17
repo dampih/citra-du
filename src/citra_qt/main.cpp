@@ -363,6 +363,8 @@ void GMainWindow::InitializeHotkeys() {
                                    Qt::ApplicationShortcut);
     hotkey_registry.RegisterHotkey("Main Window", "Toggle Frame Advancing", QKeySequence("CTRL+A"),
                                    Qt::ApplicationShortcut);
+    hotkey_registry.RegisterHotkey("Main Window", "Toggle FMV-Hack", QKeySequence("CTRL+T"),
+                                   (Qt::ApplicationShortcut));
     hotkey_registry.RegisterHotkey("Main Window", "Advance Frame", QKeySequence(Qt::Key_Backslash),
                                    Qt::ApplicationShortcut);
     hotkey_registry.RegisterHotkey("Main Window", "Load Amiibo", QKeySequence(Qt::Key_F2),
@@ -427,6 +429,11 @@ void GMainWindow::InitializeHotkeys() {
                     Settings::values.frame_limit -= SPEED_LIMIT_STEP;
                     UpdateStatusBar();
                 }
+            });
+    connect(hotkey_registry.GetHotkey("Main Window", "Toggle FMV-Hack", this),
+            &QShortcut::activated, this, [&] {
+                Settings::values.FMV_hack = !Settings::values.FMV_hack;
+                UpdateStatusBar();
             });
     connect(hotkey_registry.GetHotkey("Main Window", "Toggle Frame Advancing", this),
             &QShortcut::activated, ui.action_Enable_Frame_Advancing, &QAction::trigger);
