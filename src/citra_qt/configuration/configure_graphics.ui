@@ -212,6 +212,13 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QCheckBox" name="toggle_format_reinterpret_hack">
+        <property name="text">
+         <string>Ignore Format Reinterpretation</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
