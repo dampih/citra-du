@@ -74,7 +74,9 @@ void ConfigureGraphics::setConfiguration() {
     ui->toggle_frame_limit->setChecked(Settings::values.use_frame_limit);
     ui->frame_limit->setValue(Settings::values.frame_limit);
     ui->render_3d_combobox->setCurrentIndex(static_cast<int>(Settings::values.render_3d));
+    ui->toggle_format_reinterpret_hack->setChecked(Settings::values.use_format_reinterpret_hack);
     ui->factor_3d->setValue(Settings::values.factor_3d);
+    ui->toggle_3d->setChecked(Settings::values.toggle_3d);
     updateShaders(Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph);
     ui->toggle_linear_filter->setChecked(Settings::values.filter_mode);
     ui->layout_combobox->setCurrentIndex(static_cast<int>(Settings::values.layout_option));
@@ -99,7 +101,9 @@ void ConfigureGraphics::applyConfiguration() {
     Settings::values.frame_limit = ui->frame_limit->value();
     Settings::values.render_3d =
         static_cast<Settings::StereoRenderOption>(ui->render_3d_combobox->currentIndex());
+    Settings::values.use_format_reinterpret_hack = ui->toggle_format_reinterpret_hack->isChecked();
     Settings::values.factor_3d = ui->factor_3d->value();
+    Settings::values.toggle_3d = ui->toggle_3d->isChecked();
     Settings::values.pp_shader_name =
         ui->shader_combobox->itemText(ui->shader_combobox->currentIndex()).toStdString();
     Settings::values.filter_mode = ui->toggle_linear_filter->isChecked();
