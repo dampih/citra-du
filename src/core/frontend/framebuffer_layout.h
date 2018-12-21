@@ -42,6 +42,8 @@ FramebufferLayout DefaultFrameLayout(unsigned width, unsigned height, bool is_sw
  */
 FramebufferLayout SingleFrameLayout(unsigned width, unsigned height, bool is_swapped);
 
+FramebufferLayout MediumFrameLayout(unsigned width, unsigned height, bool is_swapped);
+
 /**
  * Factory method for constructing a Frame with the a 4x size Top screen with a 1x size bottom
  * screen on the right
