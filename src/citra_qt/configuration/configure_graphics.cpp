@@ -62,6 +62,7 @@ void ConfigureGraphics::setConfiguration() {
     ui->resolution_factor_combobox->setCurrentIndex(Settings::values.resolution_factor);
     ui->toggle_frame_limit->setChecked(Settings::values.use_frame_limit);
     ui->frame_limit->setValue(Settings::values.frame_limit);
+    ui->toggle_format_reinterpret_hack->setChecked(Settings::values.use_format_reinterpret_hack);
     ui->factor_3d->setValue(Settings::values.factor_3d);
     ui->toggle_3d->setChecked(Settings::values.toggle_3d);
     ui->layout_combobox->setCurrentIndex(static_cast<int>(Settings::values.layout_option));
@@ -82,6 +83,7 @@ void ConfigureGraphics::applyConfiguration() {
         static_cast<u16>(ui->resolution_factor_combobox->currentIndex());
     Settings::values.use_frame_limit = ui->toggle_frame_limit->isChecked();
     Settings::values.frame_limit = ui->frame_limit->value();
+    Settings::values.use_format_reinterpret_hack = ui->toggle_format_reinterpret_hack->isChecked();
     Settings::values.factor_3d = ui->factor_3d->value();
     Settings::values.toggle_3d = ui->toggle_3d->isChecked();
     Settings::values.layout_option =
