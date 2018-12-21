@@ -20,6 +20,7 @@ enum class InitClock {
 enum class LayoutOption {
     Default,
     SingleScreen,
+    MediumScreen,
     LargeScreen,
     SideScreen,
 };
