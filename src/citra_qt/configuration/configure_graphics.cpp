@@ -91,7 +91,6 @@ void ConfigureGraphics::applyConfiguration() {
     Settings::values.swap_screen = ui->swap_screen->isChecked();
     Settings::values.bg_red = static_cast<float>(bg_color.redF());
     Settings::values.bg_green = static_cast<float>(bg_color.greenF());
-    Settings::values.bg_blue = static_cast<float>(bg_color.blueF());
 }
 
 void ConfigureGraphics::retranslateUi() {

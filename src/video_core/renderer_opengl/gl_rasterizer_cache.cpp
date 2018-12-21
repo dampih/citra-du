@@ -22,8 +22,10 @@
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
 #include "common/vector_math.h"
+#include "core/core_timing.h"
 #include "core/frontend/emu_window.h"
 #include "core/memory.h"
+#include "core/settings.h"
 #include "video_core/pica_state.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
@@ -58,6 +60,9 @@ static constexpr std::array<FormatTuple, 4> depth_format_tuples = {{
 }};
 
 static constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+
+static Core::TimingEventType* cache_clear_event;
+static RasterizerCacheOpenGL* g_rasterizer_cache;
 
 static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
     const SurfaceType type = SurfaceParams::GetFormatType(pixel_format);
@@ -1022,12 +1027,30 @@ void main() {
     ASSERT(d24s8_abgr_tbo_size_u_id != -1);
     d24s8_abgr_viewport_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "viewport");
     ASSERT(d24s8_abgr_viewport_u_id != -1);
+
+    if (Settings::values.enable_clear_cache) {
+        g_rasterizer_cache = this;
+        cache_clear_event = Core::System::GetInstance().CoreTiming().RegisterEvent(
+        "RasterizerCacheOpenGL::cache_clear_event", [](u64 userdata, s64 cycles_late) {
+            g_rasterizer_cache->Clear();
+        Core::System::GetInstance().CoreTiming().ScheduleEvent(msToCycles(1000 * Settings::values.clear_cache_secs),
+                                  cache_clear_event);
+        });
+        Core::System::GetInstance().CoreTiming().ScheduleEvent(msToCycles(1000 * Settings::values.clear_cache_secs),
+                                  cache_clear_event);
+    }
 }
 
 RasterizerCacheOpenGL::~RasterizerCacheOpenGL() {
+    if (Settings::values.enable_clear_cache) {
+        Core::System::GetInstance().CoreTiming().UnscheduleEvent(cache_clear_event, 0);
+        g_rasterizer_cache = nullptr;
+        Clear();
+    } else {
     FlushAll();
     while (!surface_cache.empty())
         UnregisterSurface(*surface_cache.begin()->second.begin());
+    }
 }
 
 MICROPROFILE_DEFINE(OpenGL_BlitSurface, "OpenGL", "BlitSurface", MP_RGB(128, 192, 64));
@@ -1636,6 +1659,12 @@ void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surf
 
 void RasterizerCacheOpenGL::FlushAll() {
     FlushRegion(0, 0xFFFFFFFF);
+}
+
+void RasterizerCacheOpenGL::Clear() {
+    FlushAll();
+    while (!surface_cache.empty())
+        UnregisterSurface(*surface_cache.begin()->second.begin());
 }
 
 void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {

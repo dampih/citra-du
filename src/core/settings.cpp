@@ -77,6 +77,8 @@ void LogSettings() {
     LogSetting("Renderer_UseFrameLimit", Settings::values.use_frame_limit);
     LogSetting("Renderer_FrameLimit", Settings::values.frame_limit);
     LogSetting("Renderer_FormatReinterpretHack", Settings::values.use_format_reinterpret_hack);
+    LogSetting("Renderer_EnableClearCache", Settings::values.enable_clear_cache);
+    LogSetting("Renderer_ClearCacheSecs", Settings::values.clear_cache_secs);
     LogSetting("Layout_Toggle3d", Settings::values.toggle_3d);
     LogSetting("Layout_Factor3d", Settings::values.factor_3d);
     LogSetting("Layout_LayoutOption", static_cast<int>(Settings::values.layout_option));
