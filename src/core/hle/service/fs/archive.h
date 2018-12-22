@@ -77,9 +77,8 @@ public:
      * @param mode Mode under which to open the File
      * @return The opened File object
      */
-    ResultVal<std::shared_ptr<File>> OpenFileFromArchive(ArchiveHandle archive_handle,
-                                                         const FileSys::Path& path,
-                                                         const FileSys::Mode mode);
+    std::tuple<ResultVal<std::shared_ptr<File>>, std::chrono::nanoseconds> OpenFileFromArchive(
+        ArchiveHandle archive_handle, const FileSys::Path& path, const FileSys::Mode mode);
 
     /**
      * Delete a File from an Archive
