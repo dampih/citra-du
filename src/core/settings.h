@@ -108,6 +108,7 @@ struct InputProfile {
 struct Values {
     // CheckNew3DS
     bool is_new_3ds;
+    bool use_priority_boost;
 
     // Controls
     InputProfile current_input_profile;       ///< The current input profile

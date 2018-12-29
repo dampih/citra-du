@@ -128,6 +128,13 @@
           </item>
          </layout>
         </item>
+         <item>
+           <widget class="QCheckBox" name="toggle_use_priority_boost">
+             <property name="text">
+               <string>Boost proirity on starved threads</string>
+             </property>
+           </widget>
+         </item>
        </layout>
       </widget>
      </item>

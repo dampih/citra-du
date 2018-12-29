@@ -96,6 +96,8 @@ public:
      */
     void ExitCurrentThread();
 
+    void PriorityBoostStarvedThreads();
+
     /**
      * Get a const reference to the thread list for debug use
      */

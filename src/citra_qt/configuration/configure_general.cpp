@@ -27,6 +27,7 @@ void ConfigureGeneral::setConfiguration() {
 
     ui->toggle_update_check->setChecked(UISettings::values.check_for_update_on_start);
     ui->toggle_auto_update->setChecked(UISettings::values.update_on_close);
+    ui->toggle_use_priority_boost->setChecked(Settings::values.use_priority_boost);
 
     // The first item is "auto-select" with actual value -1, so plus one here will do the trick
     ui->region_combobox->setCurrentIndex(Settings::values.region_value + 1);
@@ -56,6 +57,7 @@ void ConfigureGeneral::applyConfiguration() {
     UISettings::values.update_on_close = ui->toggle_auto_update->isChecked();
 
     Settings::values.region_value = ui->region_combobox->currentIndex() - 1;
+    Settings::values.use_priority_boost = ui->toggle_use_priority_boost->isChecked();
 }
 
 void ConfigureGeneral::retranslateUi() {
