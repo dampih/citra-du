@@ -147,7 +147,8 @@ void Config::ReadValues() {
     qt_config->endGroup();
 
     qt_config->beginGroup("Layout");
-    Settings::values.toggle_3d = ReadSetting("toggle_3d", false).toBool();
+    Settings::values.render_3d =
+        static_cast<Settings::StereoRenderOption>(ReadSetting("render_3d", 0).toInt());
     Settings::values.factor_3d = ReadSetting("factor_3d", 0).toInt();
     Settings::values.layout_option =
         static_cast<Settings::LayoutOption>(ReadSetting("layout_option").toInt());
@@ -437,7 +438,7 @@ void Config::SaveValues() {
     qt_config->endGroup();
 
     qt_config->beginGroup("Layout");
-    WriteSetting("toggle_3d", Settings::values.toggle_3d, false);
+    WriteSetting("render_3d", static_cast<int>(Settings::values.render_3d));
     WriteSetting("factor_3d", Settings::values.factor_3d.load(), 0);
     WriteSetting("layout_option", static_cast<int>(Settings::values.layout_option));
     WriteSetting("swap_screen", Settings::values.swap_screen, false);

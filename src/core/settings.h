@@ -26,6 +26,8 @@ enum class LayoutOption {
     SideScreen,
 };
 
+enum class StereoRenderOption { Off, SideBySide, Anaglyph };
+
 namespace NativeButton {
 enum Values {
     A,
@@ -156,7 +158,7 @@ struct Values {
     float bg_green;
     float bg_blue;
 
-    bool toggle_3d;
+    StereoRenderOption render_3d;
     std::atomic<u8> factor_3d;
 
     // Audio

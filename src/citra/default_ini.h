@@ -135,9 +135,9 @@ bg_red =
 bg_blue =
 bg_green =
 
-# Toggles Stereoscopic 3D
-# 0 (default): Off, 1: On
-toggle_3d =
+# Whether and how Stereoscopic 3D should be rendered
+# 0 (default): Off, 1: Side by Side, 2: Anaglyph
+render_3d =
 
 # Change 3D Intensity
 # 0 - 100: Intensity. 0 (default)

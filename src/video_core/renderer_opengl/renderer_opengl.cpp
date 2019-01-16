@@ -62,6 +62,29 @@ void main() {
 }
 )";
 
+static const char fragment_shader_dubois[] = R"(
+#version 150 core
+
+in vec2 frag_tex_coord;
+out vec4 color;
+
+uniform sampler2D color_texture;
+uniform sampler2D color_texture_r;
+
+void main() {
+    mat3 l = mat3( 0.437, 0.449, 0.164,
+                  -0.062,-0.062,-0.024,
+                -0.048,-0.050,-0.017);
+    mat3 r = mat3(-0.011,-0.032,-0.007,
+                   0.377, 0.761, 0.009,
+                -0.026,-0.093, 1.234);
+
+    vec4 color_tex_l = texture(color_texture, frag_tex_coord);
+    vec4 color_tex_r = texture(color_texture_r, frag_tex_coord);
+    color = vec4(color_tex_l.xyz*l+color_tex_r.xyz*r, color_tex_l.w);
+}
+)";
+
 /**
  * Vertex structure that the drawn screen rectangles are composed of.
  */
@@ -279,11 +302,18 @@ void RendererOpenGL::InitOpenGLObjects() {
                  0.0f);
 
     // Link shaders and get variable locations
-    shader.Create(vertex_shader, fragment_shader);
+    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+        shader.Create(vertex_shader, fragment_shader_dubois);
+    } else {
+        shader.Create(vertex_shader, fragment_shader);
+    }
     state.draw.shader_program = shader.handle;
     state.Apply();
     uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
     uniform_color_texture = glGetUniformLocation(shader.handle, "color_texture");
+    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+        uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
+    }
     attrib_position = glGetAttribLocation(shader.handle, "vert_position");
     attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
 
@@ -416,6 +446,34 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
 }
 
 /**
+ * Draws a single texture to the emulator window, rotating the texture to correct for the 3DS's LCD
+ * rotation.
+ */
+void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_info_l,
+                                                     const ScreenInfo& screen_info_r, float x,
+                                                     float y, float w, float h) {
+    auto& texcoords = screen_info_l.display_texcoords;
+
+    std::array<ScreenRectVertex, 4> vertices = {{
+        ScreenRectVertex(x, y, texcoords.bottom, texcoords.left),
+        ScreenRectVertex(x + w, y, texcoords.bottom, texcoords.right),
+        ScreenRectVertex(x, y + h, texcoords.top, texcoords.left),
+        ScreenRectVertex(x + w, y + h, texcoords.top, texcoords.right),
+    }};
+
+    state.texture_units[0].texture_2d = screen_info_l.display_texture;
+    state.texture_units[1].texture_2d = screen_info_r.display_texture;
+    state.Apply();
+
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    state.texture_units[0].texture_2d = 0;
+    state.texture_units[1].texture_2d = 0;
+    state.Apply();
+}
+
+/**
  * Draws the emulated screens to the emulator window.
  */
 void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
@@ -440,11 +498,17 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(uniform_color_texture, 0);
 
+    // Bind a second texture for the right eye if in Anaglyph mode
+    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+        glActiveTexture(GL_TEXTURE1);
+        glUniform1i(uniform_color_texture_r, 1);
+    }
+
     if (layout.top_screen_enabled) {
-        if (!Settings::values.toggle_3d) {
+        if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
             DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left, (float)top_screen.top,
                                     (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
-        } else {
+        } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
             DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left / 2,
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                     (float)top_screen.GetHeight());
@@ -452,14 +516,18 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
                                     ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                     (float)top_screen.GetHeight());
+        } else if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+            DrawSingleScreenAnaglyphRotated(
+                screen_infos[0], screen_infos[1], (float)top_screen.left, (float)top_screen.top,
+                (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
         }
     }
     if (layout.bottom_screen_enabled) {
-        if (!Settings::values.toggle_3d) {
+        if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
             DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left,
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
                                     (float)bottom_screen.GetHeight());
-        } else {
+        } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
             DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left / 2,
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                     (float)bottom_screen.GetHeight());
@@ -467,6 +535,11 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
                                     ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                     (float)bottom_screen.GetHeight());
+        } else if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+            DrawSingleScreenAnaglyphRotated(screen_infos[2], screen_infos[2],
+                                            (float)bottom_screen.left, (float)bottom_screen.top,
+                                            (float)bottom_screen.GetWidth(),
+                                            (float)bottom_screen.GetHeight());
         }
     }
 

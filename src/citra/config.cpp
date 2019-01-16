@@ -126,7 +126,8 @@ void Config::ReadValues() {
     Settings::values.frame_limit =
         static_cast<u16>(sdl2_config->GetInteger("Renderer", "frame_limit", 100));
 
-    Settings::values.toggle_3d = sdl2_config->GetBoolean("Renderer", "toggle_3d", false);
+    Settings::values.render_3d = static_cast<Settings::StereoRenderOption>(
+        sdl2_config->GetInteger("Renderer", "render_3d", 0));
     Settings::values.factor_3d =
         static_cast<u8>(sdl2_config->GetInteger("Renderer", "factor_3d", 0));
 
