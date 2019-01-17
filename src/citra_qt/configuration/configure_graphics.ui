@@ -152,20 +152,6 @@
           </layout>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_11">
-           <item>
-            <widget class="QLabel" name="label_2">
-             <property name="text">
-              <string>Post-Processing Shader</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="shader_combobox"/>
-           </item>
-          </layout>
-         </item>
-         <item>
           <widget class="QCheckBox" name="toggle_hw_shader">
            <property name="toolTip">
             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use OpenGL to accelerate shader emulation.&lt;/p&gt;&lt;p&gt;Requires a relatively powerful GPU for better performance.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -225,6 +211,20 @@
          <string>Enable Shader JIT</string>
         </property>
        </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_11">
+        <item>
+         <widget class="QLabel" name="label_2">
+          <property name="text">
+           <string>Post-Processing Shader</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="shader_combobox"/>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
