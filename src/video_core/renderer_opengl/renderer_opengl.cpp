@@ -62,7 +62,7 @@ void main() {
 }
 )";
 
-static const char fragment_shader_dubois[] = R"(
+static const char fragment_shader_anaglyph[] = R"(
 #version 150 core
 
 in vec2 frag_tex_coord;
@@ -81,7 +81,7 @@ void main() {
 
     vec4 color_tex_l = texture(color_texture, frag_tex_coord);
     vec4 color_tex_r = texture(color_texture_r, frag_tex_coord);
-    color = vec4(color_tex_l.xyz*l+color_tex_r.xyz*r, color_tex_l.w);
+    color = vec4(color_tex_l.rgb*l+color_tex_r.rgb*r, color_tex_l.a);
 }
 )";
 
@@ -301,21 +301,7 @@ void RendererOpenGL::InitOpenGLObjects() {
     glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
                  0.0f);
 
-    // Link shaders and get variable locations
-    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-        shader.Create(vertex_shader, fragment_shader_dubois);
-    } else {
-        shader.Create(vertex_shader, fragment_shader);
-    }
-    state.draw.shader_program = shader.handle;
-    state.Apply();
-    uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
-    uniform_color_texture = glGetUniformLocation(shader.handle, "color_texture");
-    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-        uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
-    }
-    attrib_position = glGetAttribLocation(shader.handle, "vert_position");
-    attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
+    ReloadShader();
 
     // Generate VBO handle for drawing
     vertex_buffer.Create();
@@ -359,6 +345,24 @@ void RendererOpenGL::InitOpenGLObjects() {
 
     state.texture_units[0].texture_2d = 0;
     state.Apply();
+}
+
+void RendererOpenGL::ReloadShader() {
+    // Link shaders and get variable locations
+    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+        shader.Create(vertex_shader, fragment_shader_anaglyph);
+    } else {
+        shader.Create(vertex_shader, fragment_shader);
+    }
+    state.draw.shader_program = shader.handle;
+    state.Apply();
+    uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
+    uniform_color_texture = glGetUniformLocation(shader.handle, "color_texture");
+    if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+        uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
+    }
+    attrib_position = glGetAttribLocation(shader.handle, "vert_position");
+    attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
 }
 
 void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
@@ -488,20 +492,7 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
         // Link shaders and get variable locations
         shader.Release();
         state.Apply();
-        if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-            shader.Create(vertex_shader, fragment_shader_dubois);
-        } else {
-            shader.Create(vertex_shader, fragment_shader);
-        }
-        state.draw.shader_program = shader.handle;
-        state.Apply();
-        uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
-        uniform_color_texture = glGetUniformLocation(shader.handle, "color_texture");
-        if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-            uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
-        }
-        attrib_position = glGetAttribLocation(shader.handle, "vert_position");
-        attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
+        ReloadShader();
     }
 
     const auto& top_screen = layout.top_screen;

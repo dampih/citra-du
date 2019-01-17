@@ -52,6 +52,7 @@ public:
 
 private:
     void InitOpenGLObjects();
+    void ReloadShader();
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
     void DrawScreens(const Layout::FramebufferLayout& layout);
