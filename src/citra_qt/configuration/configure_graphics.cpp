@@ -41,6 +41,17 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
         }
     });
 #endif
+
+    ui->factor_3d->setEnabled(
+        static_cast<Settings::StereoRenderOption>(ui->render_3d_combobox->currentIndex()) !=
+        Settings::StereoRenderOption::Off);
+    connect(ui->render_3d_combobox,
+            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
+            [this](int currentIndex) {
+                ui->factor_3d->setEnabled(static_cast<Settings::StereoRenderOption>(currentIndex) !=
+                                          Settings::StereoRenderOption::Off);
+            });
+
     connect(ui->bg_button, &QPushButton::clicked, this, [this] {
         const QColor new_bg_color = QColorDialog::getColor(bg_color);
         if (!new_bg_color.isValid())
