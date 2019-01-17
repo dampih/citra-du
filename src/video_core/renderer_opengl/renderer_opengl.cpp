@@ -483,6 +483,27 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
                      0.0f);
     }
 
+    if (VideoCore::g_renderer_shader_update_requested.exchange(false)) {
+        // Update fragment shader before drawing
+        // Link shaders and get variable locations
+        shader.Release();
+        state.Apply();
+        if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+            shader.Create(vertex_shader, fragment_shader_dubois);
+        } else {
+            shader.Create(vertex_shader, fragment_shader);
+        }
+        state.draw.shader_program = shader.handle;
+        state.Apply();
+        uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
+        uniform_color_texture = glGetUniformLocation(shader.handle, "color_texture");
+        if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
+            uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
+        }
+        attrib_position = glGetAttribLocation(shader.handle, "vert_position");
+        attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
+    }
+
     const auto& top_screen = layout.top_screen;
     const auto& bottom_screen = layout.bottom_screen;
 
@@ -495,7 +516,6 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
     glUniformMatrix3x2fv(uniform_modelview_matrix, 1, GL_FALSE, ortho_matrix.data());
 
     // Bind texture in Texture Unit 0
-    glActiveTexture(GL_TEXTURE0);
     glUniform1i(uniform_color_texture, 0);
 
     // Bind a second texture for the right eye if in Anaglyph mode

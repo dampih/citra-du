@@ -34,6 +34,7 @@ void Apply() {
     }
 
     VideoCore::g_renderer_bg_color_update_requested = true;
+    VideoCore::g_renderer_shader_update_requested = true;
 
     auto& system = Core::System::GetInstance();
     if (system.IsPoweredOn()) {
