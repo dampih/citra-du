@@ -84,6 +84,10 @@ private:
     GLuint uniform_color_texture;
     GLuint uniform_color_texture_r;
 
+    // Shader uniform for Dolphin compatibility
+    GLuint uniform_resolution;
+    GLuint uniform_layer;
+
     // Shader attribute input indices
     GLuint attrib_position;
     GLuint attrib_tex_coord;

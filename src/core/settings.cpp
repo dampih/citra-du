@@ -83,8 +83,9 @@ void LogSettings() {
     LogSetting("Renderer_VsyncEnabled", Settings::values.vsync_enabled);
     LogSetting("Renderer_UseFrameLimit", Settings::values.use_frame_limit);
     LogSetting("Renderer_FrameLimit", Settings::values.frame_limit);
-    LogSetting("Layout_Render3d", static_cast<int>(Settings::values.render_3d));
-    LogSetting("Layout_Factor3d", Settings::values.factor_3d);
+    LogSetting("Renderer_PP_Shader", Settings::values.pp_shader_name);
+    LogSetting("Stereoscopy_Render3d", static_cast<int>(Settings::values.render_3d));
+    LogSetting("Stereoscopy_Factor3d", Settings::values.factor_3d);
     LogSetting("Layout_LayoutOption", static_cast<int>(Settings::values.layout_option));
     LogSetting("Layout_SwapScreen", Settings::values.swap_screen);
     LogSetting("Audio_EnableDspLle", Settings::values.enable_dsp_lle);

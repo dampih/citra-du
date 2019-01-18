@@ -21,6 +21,7 @@
 #include "core/tracer/recorder.h"
 #include "video_core/debug_utils/debug_utils.h"
 #include "video_core/rasterizer_interface.h"
+#include "video_core/renderer_opengl/post_processing_opengl.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
 
@@ -55,6 +56,9 @@ static const char fragment_shader[] = R"(
 in vec2 frag_tex_coord;
 out vec4 color;
 
+uniform vec4 resolution;
+uniform int layer;
+
 uniform sampler2D color_texture;
 
 void main() {
@@ -67,6 +71,9 @@ static const char fragment_shader_anaglyph[] = R"(
 
 in vec2 frag_tex_coord;
 out vec4 color;
+
+uniform vec4 resolution;
+uniform int layer;
 
 uniform sampler2D color_texture;
 uniform sampler2D color_texture_r;
@@ -350,9 +357,29 @@ void RendererOpenGL::InitOpenGLObjects() {
 void RendererOpenGL::ReloadShader() {
     // Link shaders and get variable locations
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-        shader.Create(vertex_shader, fragment_shader_anaglyph);
+        if (Settings::values.pp_shader_name == "dubois (builtin)")
+            shader.Create(vertex_shader, fragment_shader_anaglyph);
+        else {
+            std::string shader_text = OpenGL::GetShader(true, Settings::values.pp_shader_name);
+            if (!shader_text.empty()) {
+                shader.Create(vertex_shader, shader_text.c_str());
+            } else {
+                // Should probably provide some information that the shader couldn't load
+                shader.Create(vertex_shader, fragment_shader_anaglyph);
+            }
+        }
     } else {
-        shader.Create(vertex_shader, fragment_shader);
+        if (Settings::values.pp_shader_name == "none (builtin)")
+            shader.Create(vertex_shader, fragment_shader);
+        else {
+            std::string shader_text = OpenGL::GetShader(false, Settings::values.pp_shader_name);
+            if (!shader_text.empty()) {
+                shader.Create(vertex_shader, shader_text.c_str());
+            } else {
+                // Should probably provide some information that the shader couldn't load
+                shader.Create(vertex_shader, fragment_shader);
+            }
+        }
     }
     state.draw.shader_program = shader.handle;
     state.Apply();
@@ -361,6 +388,8 @@ void RendererOpenGL::ReloadShader() {
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
         uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
     }
+    uniform_resolution = glGetUniformLocation(shader.handle, "resolution");
+    uniform_layer = glGetUniformLocation(shader.handle, "layer");
     attrib_position = glGetAttribLocation(shader.handle, "vert_position");
     attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
 }
@@ -439,6 +468,7 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
         ScreenRectVertex(x + w, y + h, texcoords.top, texcoords.right),
     }};
 
+    glUniform4f(uniform_resolution, w, h, 1.0f / w, 1.0f / h);
     state.texture_units[0].texture_2d = screen_info.display_texture;
     state.Apply();
 
@@ -465,6 +495,7 @@ void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_in
         ScreenRectVertex(x + w, y + h, texcoords.top, texcoords.right),
     }};
 
+    glUniform4f(uniform_resolution, w, h, 1.0f / w, 1.0f / h);
     state.texture_units[0].texture_2d = screen_info_l.display_texture;
     state.texture_units[1].texture_2d = screen_info_r.display_texture;
     state.Apply();
@@ -515,6 +546,7 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
         glUniform1i(uniform_color_texture_r, 1);
     }
 
+    glUniform1i(uniform_layer, 0);
     if (layout.top_screen_enabled) {
         if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
             DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left, (float)top_screen.top,
@@ -523,6 +555,7 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
             DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left / 2,
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                     (float)top_screen.GetHeight());
+            glUniform1i(uniform_layer, 1);
             DrawSingleScreenRotated(screen_infos[1],
                                     ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
@@ -533,6 +566,7 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
                 (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
         }
     }
+    glUniform1i(uniform_layer, 0);
     if (layout.bottom_screen_enabled) {
         if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
             DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left,
@@ -542,6 +576,7 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
             DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left / 2,
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                     (float)bottom_screen.GetHeight());
+            glUniform1i(uniform_layer, 1);
             DrawSingleScreenRotated(screen_infos[2],
                                     ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,

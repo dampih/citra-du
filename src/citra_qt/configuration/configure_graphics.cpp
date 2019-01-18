@@ -10,6 +10,7 @@
 #include "core/core.h"
 #include "core/settings.h"
 #include "ui_configure_graphics.h"
+#include "video_core/renderer_opengl/post_processing_opengl.h"
 
 ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     : QWidget(parent), ui(new Ui::ConfigureGraphics) {
@@ -50,6 +51,8 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
             [this](int currentIndex) {
                 ui->factor_3d->setEnabled(static_cast<Settings::StereoRenderOption>(currentIndex) !=
                                           Settings::StereoRenderOption::Off);
+                updateShaders(static_cast<Settings::StereoRenderOption>(currentIndex) ==
+                              Settings::StereoRenderOption::Anaglyph);
             });
 
     connect(ui->bg_button, &QPushButton::clicked, this, [this] {
@@ -75,8 +78,9 @@ void ConfigureGraphics::setConfiguration() {
     ui->resolution_factor_combobox->setCurrentIndex(Settings::values.resolution_factor);
     ui->toggle_frame_limit->setChecked(Settings::values.use_frame_limit);
     ui->frame_limit->setValue(Settings::values.frame_limit);
-    ui->factor_3d->setValue(Settings::values.factor_3d);
     ui->render_3d_combobox->setCurrentIndex(static_cast<int>(Settings::values.render_3d));
+    ui->factor_3d->setValue(Settings::values.factor_3d);
+    updateShaders(Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph);
     ui->layout_combobox->setCurrentIndex(static_cast<int>(Settings::values.layout_option));
     ui->swap_screen->setChecked(Settings::values.swap_screen);
     bg_color = QColor::fromRgbF(Settings::values.bg_red, Settings::values.bg_green,
@@ -97,15 +101,34 @@ void ConfigureGraphics::applyConfiguration() {
         static_cast<u16>(ui->resolution_factor_combobox->currentIndex());
     Settings::values.use_frame_limit = ui->toggle_frame_limit->isChecked();
     Settings::values.frame_limit = ui->frame_limit->value();
-    Settings::values.factor_3d = ui->factor_3d->value();
     Settings::values.render_3d =
         static_cast<Settings::StereoRenderOption>(ui->render_3d_combobox->currentIndex());
+    Settings::values.factor_3d = ui->factor_3d->value();
+    Settings::values.pp_shader_name =
+        ui->shader_combobox->itemText(ui->shader_combobox->currentIndex()).toStdString();
     Settings::values.layout_option =
         static_cast<Settings::LayoutOption>(ui->layout_combobox->currentIndex());
     Settings::values.swap_screen = ui->swap_screen->isChecked();
     Settings::values.bg_red = static_cast<float>(bg_color.redF());
     Settings::values.bg_green = static_cast<float>(bg_color.greenF());
     Settings::values.bg_blue = static_cast<float>(bg_color.blueF());
+}
+
+void ConfigureGraphics::updateShaders(bool anaglyph) {
+    ui->shader_combobox->clear();
+
+    if (anaglyph)
+        ui->shader_combobox->addItem("dubois (builtin)");
+    else
+        ui->shader_combobox->addItem("none (builtin)");
+
+    ui->shader_combobox->setCurrentIndex(0);
+
+    for (const auto& shader : OpenGL::GetPostProcessingShaders(anaglyph)) {
+        ui->shader_combobox->addItem(QString::fromStdString(shader));
+        if (Settings::values.pp_shader_name == shader)
+            ui->shader_combobox->setCurrentIndex(ui->shader_combobox->count() - 1);
+    }
 }
 
 void ConfigureGraphics::retranslateUi() {

@@ -161,6 +161,8 @@ struct Values {
     StereoRenderOption render_3d;
     std::atomic<u8> factor_3d;
 
+    std::string pp_shader_name;
+
     // Audio
     bool enable_dsp_lle;
     bool enable_dsp_lle_multithread;
