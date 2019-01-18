@@ -17,7 +17,8 @@ namespace OpenGL {
 // It's fairly complete, but the features it's missing are:
 // The font texture for the ascii shader (Citra doesn't have an overlay font)
 // GetTime (not used in any shader provided by Dolphin)
-// GetOption* (used in only one shader provided by Dolphin; would require more configuration/frontend work)
+// GetOption* (used in only one shader provided by Dolphin; would require more
+// configuration/frontend work)
 constexpr char dolphin_shader_header[] = R"(
 #version 150 core
 
