@@ -124,7 +124,7 @@ void ConfigureGraphics::updateShaders(bool anaglyph) {
 
     ui->shader_combobox->setCurrentIndex(0);
 
-    for (const auto& shader : OpenGL::GetPostProcessingShaders(anaglyph)) {
+    for (const auto& shader : OpenGL::GetPostProcessingShaderList(anaglyph)) {
         ui->shader_combobox->addItem(QString::fromStdString(shader));
         if (Settings::values.pp_shader_name == shader)
             ui->shader_combobox->setCurrentIndex(ui->shader_combobox->count() - 1);

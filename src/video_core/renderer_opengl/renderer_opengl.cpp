@@ -69,6 +69,18 @@ void main() {
 static const char fragment_shader_anaglyph[] = R"(
 #version 150 core
 
+// Anaglyph Red-Cyan shader based on Dubois algorithm
+// Constants taken from the paper:
+// "Conversion of a Stereo Pair to Anaglyph with
+// the Least-Squares Projection Method"
+// Eric Dubois, March 2009
+const mat3 l = mat3( 0.437, 0.449, 0.164,
+              -0.062,-0.062,-0.024,
+              -0.048,-0.050,-0.017);
+const mat3 r = mat3(-0.011,-0.032,-0.007,
+               0.377, 0.761, 0.009,
+              -0.026,-0.093, 1.234);
+
 in vec2 frag_tex_coord;
 out vec4 color;
 
@@ -79,13 +91,6 @@ uniform sampler2D color_texture;
 uniform sampler2D color_texture_r;
 
 void main() {
-    mat3 l = mat3( 0.437, 0.449, 0.164,
-                  -0.062,-0.062,-0.024,
-                -0.048,-0.050,-0.017);
-    mat3 r = mat3(-0.011,-0.032,-0.007,
-                   0.377, 0.761, 0.009,
-                -0.026,-0.093, 1.234);
-
     vec4 color_tex_l = texture(color_texture, frag_tex_coord);
     vec4 color_tex_r = texture(color_texture_r, frag_tex_coord);
     color = vec4(color_tex_l.rgb*l+color_tex_r.rgb*r, color_tex_l.a);
@@ -360,7 +365,8 @@ void RendererOpenGL::ReloadShader() {
         if (Settings::values.pp_shader_name == "dubois (builtin)") {
             shader.Create(vertex_shader, fragment_shader_anaglyph);
         } else {
-            std::string shader_text = OpenGL::GetShader(true, Settings::values.pp_shader_name);
+            std::string shader_text =
+                OpenGL::GetPostProcessingShaderCode(true, Settings::values.pp_shader_name);
             if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader.Create(vertex_shader, fragment_shader_anaglyph);
@@ -372,7 +378,8 @@ void RendererOpenGL::ReloadShader() {
         if (Settings::values.pp_shader_name == "none (builtin)") {
             shader.Create(vertex_shader, fragment_shader);
         } else {
-            std::string shader_text = OpenGL::GetShader(false, Settings::values.pp_shader_name);
+            std::string shader_text =
+                OpenGL::GetPostProcessingShaderCode(false, Settings::values.pp_shader_name);
             if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader.Create(vertex_shader, fragment_shader);
@@ -542,7 +549,6 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
 
     // Bind a second texture for the right eye if in Anaglyph mode
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-        glActiveTexture(GL_TEXTURE1);
         glUniform1i(uniform_color_texture_r, 1);
     }
 
