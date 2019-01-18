@@ -357,27 +357,27 @@ void RendererOpenGL::InitOpenGLObjects() {
 void RendererOpenGL::ReloadShader() {
     // Link shaders and get variable locations
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-        if (Settings::values.pp_shader_name == "dubois (builtin)")
+        if (Settings::values.pp_shader_name == "dubois (builtin)") {
             shader.Create(vertex_shader, fragment_shader_anaglyph);
-        else {
+        } else {
             std::string shader_text = OpenGL::GetShader(true, Settings::values.pp_shader_name);
-            if (!shader_text.empty()) {
-                shader.Create(vertex_shader, shader_text.c_str());
-            } else {
+            if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader.Create(vertex_shader, fragment_shader_anaglyph);
+            } else {
+                shader.Create(vertex_shader, shader_text.c_str());
             }
         }
     } else {
-        if (Settings::values.pp_shader_name == "none (builtin)")
+        if (Settings::values.pp_shader_name == "none (builtin)") {
             shader.Create(vertex_shader, fragment_shader);
-        else {
+        } else {
             std::string shader_text = OpenGL::GetShader(false, Settings::values.pp_shader_name);
-            if (!shader_text.empty()) {
-                shader.Create(vertex_shader, shader_text.c_str());
-            } else {
+            if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader.Create(vertex_shader, fragment_shader);
+            } else {
+                shader.Create(vertex_shader, shader_text.c_str());
             }
         }
     }
@@ -459,9 +459,9 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
  */
 void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, float x, float y,
                                              float w, float h) {
-    auto& texcoords = screen_info.display_texcoords;
+    const auto& texcoords = screen_info.display_texcoords;
 
-    std::array<ScreenRectVertex, 4> vertices = {{
+    const std::array<ScreenRectVertex, 4> vertices = {{
         ScreenRectVertex(x, y, texcoords.bottom, texcoords.left),
         ScreenRectVertex(x + w, y, texcoords.bottom, texcoords.right),
         ScreenRectVertex(x, y + h, texcoords.top, texcoords.left),
@@ -486,9 +486,9 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
 void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_info_l,
                                                      const ScreenInfo& screen_info_r, float x,
                                                      float y, float w, float h) {
-    auto& texcoords = screen_info_l.display_texcoords;
+    const auto& texcoords = screen_info_l.display_texcoords;
 
-    std::array<ScreenRectVertex, 4> vertices = {{
+    const std::array<ScreenRectVertex, 4> vertices = {{
         ScreenRectVertex(x, y, texcoords.bottom, texcoords.left),
         ScreenRectVertex(x + w, y, texcoords.bottom, texcoords.right),
         ScreenRectVertex(x, y + h, texcoords.top, texcoords.left),

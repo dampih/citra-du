@@ -59,7 +59,7 @@ Handler::Handler() {
     Core::System::GetInstance().CoreTiming().ScheduleEvent(0, update_time_event);
 
     float slidestate = (Settings::values.render_3d != Settings::StereoRenderOption::Off)
-                           ? (float_le)Settings::values.factor_3d / 100
+                           ? static_cast<float_le>(Settings::values.factor_3d) / 100
                            : 0.0f;
     shared_page.sliderstate_3d = slidestate;
 }

@@ -12,7 +12,7 @@
 
 namespace OpenGL {
 
-const std::string dolphin_shader_header = R"(
+constexpr char dolphin_shader_header[] = R"(
 #version 150 core
 
 // hlsl to glsl types
@@ -105,12 +105,11 @@ std::vector<std::string> GetPostProcessingShaders(bool anaglyph) {
                                           const std::string& virtual_name) -> bool {
         const std::string physical_name = directory + DIR_SEP + virtual_name;
         if (!FileUtil::IsDirectory(physical_name)) {
-
             // The following is done to avoid coupling this to Qt
-            if (virtual_name.find_last_of(".") != std::string::npos) {
-                if (Common::ToLower(virtual_name.substr(virtual_name.find_last_of(".") + 1)) ==
-                    "glsl") {
-                    shader_names.push_back(virtual_name.substr(0, virtual_name.find_last_of(".")));
+            std::size_t dot_pos = virtual_name.rfind(".");
+            if (dot_pos != std::string::npos) {
+                if (Common::ToLower(virtual_name.substr(dot_pos + 1)) == "glsl") {
+                    shader_names.push_back(virtual_name.substr(0, dot_pos));
                 }
             }
         }
@@ -127,7 +126,6 @@ std::vector<std::string> GetPostProcessingShaders(bool anaglyph) {
 std::string GetShader(bool anaglyph, std::string shader) {
     std::string shader_dir = FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir);
     std::string shader_path;
-    std::ifstream file;
 
     if (anaglyph) {
         shader_dir = shader_dir + "anaglyph";
@@ -141,10 +139,10 @@ std::string GetShader(bool anaglyph, std::string shader) {
         const std::string physical_name = directory + DIR_SEP + virtual_name;
         if (!FileUtil::IsDirectory(physical_name)) {
             // The following is done to avoid coupling this to Qt
-            if (virtual_name.find_last_of(".") != std::string::npos) {
-                if (Common::ToLower(virtual_name.substr(virtual_name.find_last_of(".") + 1)) ==
-                        "glsl" &&
-                    virtual_name.substr(0, virtual_name.find_last_of(".")) == shader) {
+            std::size_t dot_pos = virtual_name.rfind(".");
+            if (dot_pos != std::string::npos) {
+                if (Common::ToLower(virtual_name.substr(dot_pos + 1)) == "glsl" &&
+                    virtual_name.substr(0, dot_pos) == shader) {
                     shader_path = physical_name;
                     return false;
                 }
@@ -157,6 +155,8 @@ std::string GetShader(bool anaglyph, std::string shader) {
     if (shader_path.empty()) {
         return "";
     }
+
+    std::ifstream file;
     OpenFStream(file, shader_path, std::ios_base::in);
     if (!file) {
         return "";
@@ -164,7 +164,7 @@ std::string GetShader(bool anaglyph, std::string shader) {
 
     std::stringstream shader_text;
     shader_text << file.rdbuf();
-    file.close();
+
     return dolphin_shader_header + shader_text.str();
 }
 
