@@ -527,9 +527,14 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
 
     if (VideoCore::g_renderer_shader_update_requested.exchange(false)) {
         // Update fragment shader before drawing
-        // Link shaders and get variable locations
         shader.Release();
+        // Our state should be current from the function that called this
+        // so we can just update the shader program to what Release() may have updated it to
+        // This prevents use of a released shader program
+        // which was shown to be an issue in the SDL2 frontend when software rendered
+        state.draw.shader_program = OpenGLState::GetCurState().draw.shader_program;
         state.Apply();
+        // Link shaders and get variable locations
         ReloadShader();
     }
 
