@@ -58,9 +58,7 @@ Handler::Handler() {
         "SharedPage::UpdateTimeCallback", std::bind(&Handler::UpdateTimeCallback, this, _1, _2));
     Core::System::GetInstance().CoreTiming().ScheduleEvent(0, update_time_event);
 
-    float slidestate = (Settings::values.render_3d != Settings::StereoRenderOption::Off)
-                           ? Settings::values.factor_3d / 100.0f
-                           : 0.0f;
+    float slidestate = Settings::values.factor_3d / 100.0f;
     shared_page.sliderstate_3d = static_cast<float_le>(slidestate);
 }
 
