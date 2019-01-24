@@ -56,7 +56,8 @@ static const char fragment_shader[] = R"(
 in vec2 frag_tex_coord;
 out vec4 color;
 
-uniform vec4 resolution;
+uniform vec4 i_resolution;
+uniform vec4 o_resolution;
 uniform int layer;
 
 uniform sampler2D color_texture;
@@ -395,7 +396,8 @@ void RendererOpenGL::ReloadShader() {
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
         uniform_color_texture_r = glGetUniformLocation(shader.handle, "color_texture_r");
     }
-    uniform_resolution = glGetUniformLocation(shader.handle, "resolution");
+    uniform_i_resolution = glGetUniformLocation(shader.handle, "i_resolution");
+    uniform_o_resolution = glGetUniformLocation(shader.handle, "o_resolution");
     uniform_layer = glGetUniformLocation(shader.handle, "layer");
     attrib_position = glGetAttribLocation(shader.handle, "vert_position");
     attrib_tex_coord = glGetAttribLocation(shader.handle, "vert_tex_coord");
@@ -475,7 +477,15 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
         ScreenRectVertex(x + w, y + h, texcoords.top, texcoords.right),
     }};
 
-    glUniform4f(uniform_resolution, w, h, 1.0f / w, 1.0f / h);
+    // As this is the "DrawSingleScreenRotated" function, the output resolution dimensions have been
+    // swapped. If a non-rotated draw-screen function were to be added for book-mode games, those
+    // should probably be set to the standard (w, h, 1.0 / w, 1.0 / h) ordering.
+    u16 scale_factor = VideoCore::GetResolutionScaleFactor();
+    glUniform4f(uniform_i_resolution, screen_info.texture.width * scale_factor,
+                screen_info.texture.height * scale_factor,
+                1.0 / (screen_info.texture.width * scale_factor),
+                1.0 / (screen_info.texture.height * scale_factor));
+    glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
     state.texture_units[0].texture_2d = screen_info.display_texture;
     state.Apply();
 
@@ -502,7 +512,12 @@ void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_in
         ScreenRectVertex(x + w, y + h, texcoords.top, texcoords.right),
     }};
 
-    glUniform4f(uniform_resolution, w, h, 1.0f / w, 1.0f / h);
+    u16 scale_factor = VideoCore::GetResolutionScaleFactor();
+    glUniform4f(uniform_i_resolution, screen_info_l.texture.width * scale_factor,
+                screen_info_l.texture.height * scale_factor,
+                1.0 / (screen_info_l.texture.width * scale_factor),
+                1.0 / (screen_info_l.texture.height * scale_factor));
+    glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
     state.texture_units[0].texture_2d = screen_info_l.display_texture;
     state.texture_units[1].texture_2d = screen_info_r.display_texture;
     state.Apply();

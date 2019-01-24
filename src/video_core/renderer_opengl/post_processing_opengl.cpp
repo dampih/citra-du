@@ -42,7 +42,8 @@ out float4 color;
 // Input coordinates
 in float2 frag_tex_coord;
 // Resolution
-uniform float4 resolution;
+uniform float4 i_resolution;
+uniform float4 o_resolution;
 // Layer
 uniform int layer;
 
@@ -72,12 +73,32 @@ float4 SampleLayer(int layer)
 
 float2 GetResolution()
 {
-    return resolution.xy;
+    return i_resolution.xy;
 }
 
 float2 GetInvResolution()
 {
-    return resolution.zw;
+    return i_resolution.zw;
+}
+
+float2 GetIResolution()
+{
+    return i_resolution.xy;
+}
+
+float2 GetIInvResolution()
+{
+    return i_resolution.zw;
+}
+
+float2 GetOResolution()
+{
+    return o_resolution.xy;
+}
+
+float2 GetOInvResolution()
+{
+    return o_resolution.zw;
 }
 
 float2 GetCoordinates()
