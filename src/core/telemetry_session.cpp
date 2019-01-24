@@ -178,6 +178,7 @@ TelemetrySession::TelemetrySession() {
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseShaderJit",
              Settings::values.use_shader_jit);
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseVsync", Settings::values.vsync_enabled);
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_FilterMode", Settings::values.filter_mode);
     AddField(Telemetry::FieldType::UserConfig, "Renderer_Render3d",
              static_cast<int>(Settings::values.render_3d));
     AddField(Telemetry::FieldType::UserConfig, "Renderer_Factor3d",

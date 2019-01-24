@@ -52,6 +52,7 @@ public:
 
 private:
     void InitOpenGLObjects();
+    void ReloadSampler();
     void ReloadShader();
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
@@ -75,6 +76,7 @@ private:
     OGLBuffer vertex_buffer;
     OGLProgram shader;
     OGLFramebuffer screenshot_framebuffer;
+    OGLSampler filter_sampler;
 
     /// Display information for top and bottom screens respectively
     std::array<ScreenInfo, 3> screen_infos;

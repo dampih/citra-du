@@ -34,6 +34,7 @@ void Apply() {
     }
 
     VideoCore::g_renderer_bg_color_update_requested = true;
+    VideoCore::g_renderer_sampler_update_requested = true;
     VideoCore::g_renderer_shader_update_requested = true;
 
     auto& system = Core::System::GetInstance();
@@ -83,7 +84,8 @@ void LogSettings() {
     LogSetting("Renderer_VsyncEnabled", Settings::values.vsync_enabled);
     LogSetting("Renderer_UseFrameLimit", Settings::values.use_frame_limit);
     LogSetting("Renderer_FrameLimit", Settings::values.frame_limit);
-    LogSetting("Renderer_PP_Shader", Settings::values.pp_shader_name);
+    LogSetting("Renderer_PostProcessingShader", Settings::values.pp_shader_name);
+    LogSetting("Renderer_FilterMode", Settings::values.filter_mode);
     LogSetting("Stereoscopy_Render3d", static_cast<int>(Settings::values.render_3d));
     LogSetting("Stereoscopy_Factor3d", Settings::values.factor_3d);
     LogSetting("Layout_LayoutOption", static_cast<int>(Settings::values.layout_option));

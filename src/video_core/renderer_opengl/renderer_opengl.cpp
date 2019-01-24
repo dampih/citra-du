@@ -314,6 +314,9 @@ void RendererOpenGL::InitOpenGLObjects() {
     glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
                  0.0f);
 
+    filter_sampler.Create();
+    ReloadSampler();
+
     ReloadShader();
 
     // Generate VBO handle for drawing
@@ -358,6 +361,16 @@ void RendererOpenGL::InitOpenGLObjects() {
 
     state.texture_units[0].texture_2d = 0;
     state.Apply();
+}
+
+void RendererOpenGL::ReloadSampler() {
+    glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_MAX_LEVEL, 0);
+    glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_MIN_FILTER,
+                        Settings::values.filter_mode ? GL_LINEAR : GL_NEAREST);
+    glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_MAG_FILTER,
+                        Settings::values.filter_mode ? GL_LINEAR : GL_NEAREST);
+    glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
 void RendererOpenGL::ReloadShader() {
@@ -487,12 +500,14 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
                 1.0 / (screen_info.texture.height * scale_factor));
     glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
     state.texture_units[0].texture_2d = screen_info.display_texture;
+    state.texture_units[0].sampler = filter_sampler.handle;
     state.Apply();
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     state.texture_units[0].texture_2d = 0;
+    state.texture_units[0].sampler = 0;
     state.Apply();
 }
 
@@ -520,6 +535,8 @@ void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_in
     glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
     state.texture_units[0].texture_2d = screen_info_l.display_texture;
     state.texture_units[1].texture_2d = screen_info_r.display_texture;
+    state.texture_units[0].sampler = filter_sampler.handle;
+    state.texture_units[1].sampler = filter_sampler.handle;
     state.Apply();
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
@@ -527,6 +544,8 @@ void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_in
 
     state.texture_units[0].texture_2d = 0;
     state.texture_units[1].texture_2d = 0;
+    state.texture_units[0].sampler = 0;
+    state.texture_units[1].sampler = 0;
     state.Apply();
 }
 
@@ -538,6 +557,11 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
         // Update background color before drawing
         glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
                      0.0f);
+    }
+
+    if (VideoCore::g_renderer_sampler_update_requested.exchange(false)) {
+        // Set the new filtering mode for the sampler
+        ReloadSampler();
     }
 
     if (VideoCore::g_renderer_shader_update_requested.exchange(false)) {

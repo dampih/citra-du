@@ -157,6 +157,7 @@ void Config::ReadValues() {
                         : "none (builtin)")
             .toString()
             .toStdString();
+    Settings::values.filter_mode = ReadSetting("filter_mode", true).toBool();
     Settings::values.layout_option =
         static_cast<Settings::LayoutOption>(ReadSetting("layout_option").toInt());
     Settings::values.swap_screen = ReadSetting("swap_screen", false).toBool();
@@ -451,6 +452,7 @@ void Config::SaveValues() {
                  (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
                      ? "dubois (builtin)"
                      : "none (builtin)");
+    WriteSetting("filter_mode", Settings::values.filter_mode, true);
     WriteSetting("layout_option", static_cast<int>(Settings::values.layout_option));
     WriteSetting("swap_screen", Settings::values.swap_screen, false);
     WriteSetting("custom_layout", Settings::values.custom_layout, false);

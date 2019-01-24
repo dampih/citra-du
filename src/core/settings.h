@@ -161,6 +161,7 @@ struct Values {
     StereoRenderOption render_3d;
     std::atomic<u8> factor_3d;
 
+    bool filter_mode;
     std::string pp_shader_name;
 
     // Audio
