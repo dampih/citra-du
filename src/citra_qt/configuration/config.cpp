@@ -445,7 +445,7 @@ void Config::SaveValues() {
     qt_config->endGroup();
 
     qt_config->beginGroup("Layout");
-    WriteSetting("render_3d", static_cast<int>(Settings::values.render_3d));
+    WriteSetting("render_3d", static_cast<int>(Settings::values.render_3d), 0);
     WriteSetting("factor_3d", Settings::values.factor_3d.load(), 0);
     WriteSetting("pp_shader_name", QString::fromStdString(Settings::values.pp_shader_name),
                  (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
