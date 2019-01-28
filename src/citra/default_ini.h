@@ -141,13 +141,18 @@ bg_red =
 bg_blue =
 bg_green =
 
-# Toggles Stereoscopic 3D
-# 0 (default): Off, 1: On
-toggle_3d =
+# Whether and how Stereoscopic 3D should be rendered
+# 0 (default): Off, 1: Side by Side, 2: Anaglyph
+render_3d =
 
 # Change 3D Intensity
 # 0 - 100: Intensity. 0 (default)
 factor_3d =
+
+# The name of the post processing shader to apply.
+# Loaded from shaders if render_3d is off or side by side.
+# Loaded from shaders/anaglyph if render_3d is anaglyph
+pp_shader_name =
 
 [Layout]
 # Layout for the screen inside the render window.

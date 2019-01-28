@@ -60,7 +60,7 @@ EmuWindow::~EmuWindow() {
  */
 static bool IsWithinTouchscreen(const Layout::FramebufferLayout& layout, unsigned framebuffer_x,
                                 unsigned framebuffer_y) {
-    if (Settings::values.toggle_3d) {
+    if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
         return (framebuffer_y >= layout.bottom_screen.top &&
                 framebuffer_y < layout.bottom_screen.bottom &&
                 framebuffer_x >= layout.bottom_screen.left / 2 &&
@@ -88,7 +88,7 @@ void EmuWindow::TouchPressed(unsigned framebuffer_x, unsigned framebuffer_y) {
         return;
 
     std::lock_guard<std::mutex> guard(touch_state->mutex);
-    if (Settings::values.toggle_3d) {
+    if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
         touch_state->touch_x =
             static_cast<float>(framebuffer_x - framebuffer_layout.bottom_screen.left / 2) /
             (framebuffer_layout.bottom_screen.right / 2 -
