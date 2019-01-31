@@ -89,6 +89,7 @@ GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders) {
     for (GLuint shader : shaders) {
         if (shader != 0) {
             glDetachShader(program_id, shader);
+            glDeleteShader(shader);
         }
     }
 
