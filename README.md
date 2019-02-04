@@ -1,3 +1,25 @@
+# Merge log
+
+Scroll down for the original README.md!
+
+Base revision: f620c862f356d451455165f9b7491d8705cbec13
+
+|Pull Request|Commit|Title|Author|Merged?|
+|----|----|----|----|----|
+|[6](https://github.com/citra-emu/citra-canary/pull/6)|[a53a8d3](https://github.com/citra-emu/citra-canary/pull/6/files/)|Canary Base (MinGW Test)|[liushuyu](https://github.com/liushuyu)|Yes|
+|[4619](https://github.com/citra-emu/citra/pull/4619)|[b5f2318](https://github.com/citra-emu/citra/pull/4619/files/)|gl_rasterizer: change shadow_texture_bias from shader config to shader uniform|[wwylele](https://github.com/wwylele)|Yes|
+|[4614](https://github.com/citra-emu/citra/pull/4614)|[6382d9b](https://github.com/citra-emu/citra/pull/4614/files/)|NWM_UDS: move states into the class|[wwylele](https://github.com/wwylele)|Yes|
+|[4610](https://github.com/citra-emu/citra/pull/4610)|[433176a](https://github.com/citra-emu/citra/pull/4610/files/)|Implement UI for adding/editing/deleting cheats|[zhaowenlan1779](https://github.com/zhaowenlan1779)|Yes|
+|[4608](https://github.com/citra-emu/citra/pull/4608)|[3a7a686](https://github.com/citra-emu/citra/pull/4608/files/)|Kernel/SharedMemory: make owner_process a raw pointer|[wwylele](https://github.com/wwylele)|Yes|
+|[4508](https://github.com/citra-emu/citra/pull/4508)|[41be572](https://github.com/citra-emu/citra/pull/4508/files/)|[WIP] CoreAudio::HLE: Add FFmpeg/WMF AAC decoder|[B3n30](https://github.com/B3n30)|Yes|
+|[4472](https://github.com/citra-emu/citra/pull/4472)|[4f4deb6](https://github.com/citra-emu/citra/pull/4472/files/)|HLE: Move NS:S into APT and remove NS|[jroweboy](https://github.com/jroweboy)|Yes|
+|[4396](https://github.com/citra-emu/citra/pull/4396)|[8a24cbb](https://github.com/citra-emu/citra/pull/4396/files/)|fs_user: Add a delay for each file open|[FearlessTobi](https://github.com/FearlessTobi)|Yes|
+
+
+End of merge log. You can find the original README.md below the break.
+
+------
+
 **BEFORE FILING AN ISSUE, READ THE RELEVANT SECTION IN THE [CONTRIBUTING](https://github.com/citra-emu/citra/wiki/Contributing#reporting-issues) FILE!!!**
 
 Citra
