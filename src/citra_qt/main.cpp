@@ -403,6 +403,11 @@ void GMainWindow::InitializeHotkeys() {
                     ToggleFullscreen();
                 }
             });
+    connect(hotkey_registry.GetHotkey("Main Window", "Toggle FMV-Hack", this),
+            &QShortcut::activated, this, [&] {
+                Settings::values.FMV_hack = !Settings::values.FMV_hack;
+                UpdateStatusBar();
+            });
     connect(hotkey_registry.GetHotkey("Main Window", "Toggle Speed Limit", this),
             &QShortcut::activated, this, [&] {
                 Settings::values.use_frame_limit = !Settings::values.use_frame_limit;

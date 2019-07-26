@@ -54,7 +54,7 @@ const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config:
 // QKeySequnce(...).toString() is NOT ALLOWED HERE.
 // This must be in alphabetical order according to action name as it must have the same order as
 // UISetting::values.shortcuts, which is alphabetically ordered.
-const std::array<UISettings::Shortcut, 19> Config::default_hotkeys{
+const std::array<UISettings::Shortcut, 20> Config::default_hotkeys{
     {{"Advance Frame", "Main Window", {"\\", Qt::ApplicationShortcut}},
      {"Capture Screenshot", "Main Window", {"Ctrl+P", Qt::ApplicationShortcut}},
      {"Continue/Pause Emulation", "Main Window", {"F4", Qt::WindowShortcut}},
@@ -71,6 +71,7 @@ const std::array<UISettings::Shortcut, 19> Config::default_hotkeys{
      {"Swap Screens", "Main Window", {"F9", Qt::WindowShortcut}},
      {"Toggle Filter Bar", "Main Window", {"Ctrl+F", Qt::WindowShortcut}},
      {"Toggle Frame Advancing", "Main Window", {"Ctrl+A", Qt::ApplicationShortcut}},
+     {"Toggle FMV-Hack", "Main Window", {"Ctrl+T", Qt::ApplicationShortcut}},
      {"Toggle Screen Layout", "Main Window", {"F10", Qt::WindowShortcut}},
      {"Toggle Speed Limit", "Main Window", {"Ctrl+Z", Qt::ApplicationShortcut}},
      {"Toggle Status Bar", "Main Window", {"Ctrl+S", Qt::WindowShortcut}}}};
@@ -165,6 +166,8 @@ void Config::ReadValues() {
     Settings::values.vsync_enabled = ReadSetting("vsync_enabled", false).toBool();
     Settings::values.use_frame_limit = ReadSetting("use_frame_limit", true).toBool();
     Settings::values.frame_limit = ReadSetting("frame_limit", 100).toInt();
+    Settings::values.FMV_hack = ReadSetting("FMV_hack", true).toBool();
+    Settings::values.AddTicks = ReadSetting("AddTicks", 18000).toInt();
 
     Settings::values.bg_red = ReadSetting("bg_red", 0.0).toFloat();
     Settings::values.bg_green = ReadSetting("bg_green", 0.0).toFloat();
@@ -454,6 +457,8 @@ void Config::SaveValues() {
     WriteSetting("vsync_enabled", Settings::values.vsync_enabled, false);
     WriteSetting("use_frame_limit", Settings::values.use_frame_limit, true);
     WriteSetting("frame_limit", Settings::values.frame_limit, 100);
+    WriteSetting("FMV_hack", Settings::values.FMV_hack, true);
+    WriteSetting("AddTicks", Settings::values.AddTicks, 18000);
 
     // Cast to double because Qt's written float values are not human-readable
     WriteSetting("bg_red", (double)Settings::values.bg_red, 0.0);
