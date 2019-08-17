@@ -4,7 +4,7 @@
 # of citra we're building (nightly or canary)
 
 # Converts "citra-emu/citra-nightly" to "citra-nightly"
-REPO_NAME=$(echo $TRAVIS_REPO_SLUG | cut -d'/' -f 2)
+REPO_NAME=$(echo $BUILD_REPOSITORY_NAME | cut -d'/' -f 2)
 # Converts "citra-nightly" to "Citra Nightly"
 REPO_NAME_FRIENDLY=$(echo $REPO_NAME | sed -e 's/-/ /g' -e 's/\b\(.\)/\u\1/g')
 
@@ -54,17 +54,14 @@ cat > /tmp/org.citra.$REPO_NAME.json <<EOF
             "--share=network"
         ],
         "env": {
-            "CI": "$CI",
-            "TRAVIS": "$TRAVIS",
-            "CONTINUOUS_INTEGRATION": "$CONTINUOUS_INTEGRATION",
-            "TRAVIS_BRANCH": "$TRAVIS_BRANCH",
-            "TRAVIS_BUILD_ID": "$TRAVIS_BUILD_ID",
-            "TRAVIS_BUILD_NUMBER": "$TRAVIS_BUILD_NUMBER",
-            "TRAVIS_COMMIT": "$TRAVIS_COMMIT",
-            "TRAVIS_JOB_ID": "$TRAVIS_JOB_ID",
-            "TRAVIS_JOB_NUMBER": "$TRAVIS_JOB_NUMBER",
-            "TRAVIS_REPO_SLUG": "$TRAVIS_REPO_SLUG",
-            "TRAVIS_TAG": "$TRAVIS_TAG"
+            "CI": "$TF_BUILD",
+            "AZP": "$TF_BUILD",
+            "AZP_BRANCH": "$BUILD_SOURCEBRANCH",
+            "AZP_BUILD_ID": "$BUILD_BUILDID",
+            "AZP_BUILD_NUMBER": "$BUILD_BUILDNUMBER",
+            "AZP_COMMIT": "$BUILD_SOURCEVERSION",
+            "AZP_REPO_NAME": "$BUILD_REPOSITORY_NAME",
+            "AZP_TAG": "$BUILD_SOURCEBRANCHNAME"
         }
     },
     "finish-args": [
@@ -108,7 +105,7 @@ cat > /tmp/org.citra.$REPO_NAME.json <<EOF
                 {
                     "type": "git",
                     "url": "https://github.com/citra-emu/$REPO_NAME.git",
-                    "branch": "$TRAVIS_BRANCH",
+                    "branch": "${BUILD_SOURCEBRANCHNAME}",
                     "disable-shallow-clone": true
                 },
                 {
@@ -122,4 +119,4 @@ cat > /tmp/org.citra.$REPO_NAME.json <<EOF
 EOF
 
 # Call the script to build citra
-/bin/bash -ex /citra/.travis/linux-flatpak/docker.sh
+# /bin/bash -ex /citra/.travis/linux-flatpak/docker.sh

@@ -1,0 +1,46 @@
+trigger:
+  tags:
+    include:
+      - '*'
+
+resources:
+  containers:
+    - container: linux_flatpak
+      image: "citraemu/build-environments:linux-flatpak"
+      options: --privileged
+
+jobs:
+# LinuxFlatPak build
+- job: LinuxFlatPak
+
+  pool:
+    vmImage: 'ubuntu-16.04'
+  container: linux_flatpak
+  steps:
+  - bash: /bin/bash -ex ./.travis/linux-flatpak/generate-data.sh
+    displayName: 'Generate Flatpak metadata'
+  - task: DownloadSecureFile@1
+    displayName: 'Fetch secure file'
+    inputs:
+      secureFile: flatpak_gpg.key
+  - task: DownloadSecureFile@1
+    displayName: 'Fetch secure file'
+    inputs:
+      secureFile: flatpak_ssh.key
+  - bash: /bin/bash -ex ./.travis/linux-flatpak/docker.sh
+    displayName: 'Build Citra Flatpak'
+    # secret variables are used here
+    env:
+      FLATPAK_GPG_KEY_ID: $(FLATPAK_GPG_KEY_ID)
+      AZP_TMP_DIR: $(Agent.TempDirectory) # secure files are downloaded to here
+  - bash: /bin/bash -ex ./.travis/linux-flatpak/upload.sh
+    displayName: "Upload Citra Flatpak"
+    env:
+      FLATPAK_GPG_KEY_ID: $(FLATPAK_GPG_KEY_ID)
+      FLATPAK_SSH_HOSTNAME: $(FLATPAK_SSH_HOSTNAME)
+      FLATPAK_SSH_HOST_FINGERPRINT: $(FLATPAK_SSH_HOST_FINGERPRINT)
+      FLATPAK_SSH_PORT: $(FLATPAK_SSH_PORT)
+      FLATPAK_SSH_USER: $(FLATPAK_SSH_USER)
+      AZP_TMP_DIR: $(Agent.TempDirectory) # secure files are downloaded to here
+    # condition: |
+    #   eq(variables['System.TeamProjectId'], '4ca189cc-7e63-4eb0-9763-ee43a919e917')
