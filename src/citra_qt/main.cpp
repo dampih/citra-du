@@ -45,6 +45,7 @@
 #include "citra_qt/hotkeys.h"
 #include "citra_qt/main.h"
 #include "citra_qt/multiplayer/state.h"
+#include "citra_qt/qt_image_interface.h"
 #include "citra_qt/uisettings.h"
 #include "citra_qt/updater/updater.h"
 #include "citra_qt/util/clickable_label.h"
@@ -1027,6 +1028,16 @@ void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, data_id + 0xe00000000) +
                "content/";
         break;
+    case GameListOpenTarget::TEXTURE_DUMP:
+        open_target = "Dumped Textures";
+        path = fmt::format("{}textures/{:016X}/",
+                           FileUtil::GetUserPath(FileUtil::UserPath::DumpDir), data_id);
+        break;
+    case GameListOpenTarget::TEXTURE_LOAD:
+        open_target = "Custom Textures";
+        path = fmt::format("{}textures/{:016X}/",
+                           FileUtil::GetUserPath(FileUtil::UserPath::LoadDir), data_id);
+        break;
     default:
         LOG_ERROR(Frontend, "Unexpected target {}", static_cast<int>(target));
         return;
@@ -1988,6 +1999,9 @@ int main(int argc, char* argv[]) {
     Frontend::RegisterDefaultApplets();
     Core::System::GetInstance().RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
     Core::System::GetInstance().RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
+
+    // Register Qt image interface
+    Core::System::GetInstance().RegisterImageInterface(std::make_shared<QtImageInterface>());
 
     main_window.show();
     int result = app.exec();

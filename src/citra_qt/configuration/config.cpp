@@ -200,6 +200,12 @@ void Config::ReadValues() {
     Settings::values.custom_bottom_bottom = ReadSetting("custom_bottom_bottom", 480).toInt();
     qt_config->endGroup();
 
+    qt_config->beginGroup("Utility");
+    Settings::values.dump_textures = ReadSetting("dump_textures", false).toBool();
+    Settings::values.custom_textures = ReadSetting("custom_textures", false).toBool();
+    Settings::values.preload_textures = ReadSetting("preload_textures", false).toBool();
+    qt_config->endGroup();
+
     qt_config->beginGroup("Audio");
     Settings::values.enable_dsp_lle = ReadSetting("enable_dsp_lle", false).toBool();
     Settings::values.enable_dsp_lle_multithread =
@@ -495,6 +501,12 @@ void Config::SaveValues() {
     WriteSetting("custom_bottom_top", Settings::values.custom_bottom_top, 240);
     WriteSetting("custom_bottom_right", Settings::values.custom_bottom_right, 360);
     WriteSetting("custom_bottom_bottom", Settings::values.custom_bottom_bottom, 480);
+    qt_config->endGroup();
+
+    qt_config->beginGroup("Utility");
+    WriteSetting("dump_textures", Settings::values.dump_textures, false);
+    WriteSetting("custom_textures", Settings::values.custom_textures, false);
+    WriteSetting("preload_textures", Settings::values.preload_textures, false);
     qt_config->endGroup();
 
     qt_config->beginGroup("Audio");
