@@ -17,6 +17,11 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     ui->setupUi(this);
     SetConfiguration();
 
+
+    ui->AddTicks->setEnabled(Settings::values.FMV_hack);
+    connect(ui->FMV_hack, &QCheckBox::stateChanged, ui->AddTicks, &QSpinBox::setEnabled);
+
+
     ui->hw_renderer_group->setEnabled(ui->toggle_hw_renderer->isChecked());
     connect(ui->toggle_hw_renderer, &QCheckBox::toggled, this, [this] {
         auto checked = ui->toggle_hw_renderer->isChecked();
@@ -47,6 +52,10 @@ void ConfigureGraphics::SetConfiguration() {
     ui->toggle_accurate_gs->setChecked(Settings::values.shaders_accurate_gs);
     ui->toggle_accurate_mul->setChecked(Settings::values.shaders_accurate_mul);
     ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit);
+
+    ui->FMV_hack->setChecked(Settings::values.FMV_hack);
+    ui->AddTicks->setValue(Settings::values.AddTicks);
+
 }
 
 void ConfigureGraphics::ApplyConfiguration() {
@@ -55,6 +64,10 @@ void ConfigureGraphics::ApplyConfiguration() {
     Settings::values.shaders_accurate_gs = ui->toggle_accurate_gs->isChecked();
     Settings::values.shaders_accurate_mul = ui->toggle_accurate_mul->isChecked();
     Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();
+
+    Settings::values.FMV_hack = ui->FMV_hack->isChecked();
+    Settings::values.AddTicks = ui->AddTicks->value();
+
 }
 
 void ConfigureGraphics::RetranslateUI() {
